@@ -190,6 +190,32 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
   .p .total { font-size: 1.8rem; }
   .pts { font-size: 1.15rem; }
 }
+/* history */
+.filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.hs-head { font-size: 1rem; }
+.hs-head b { font-family: var(--f-display); font-size: 1.2rem; color: var(--good); }
+.hsum { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.hsum th, .hsum td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; max-width: none; }
+.hsum th { border-bottom: 2px solid var(--ink); }
+.hsum th:first-child, .hsum td:first-child { text-align: left; width: auto; }
+.hsum td { font-weight: 600; }
+.hsum td:first-child { font-weight: 700; }
+.hsum tr.best td { color: var(--good); }
+.days { display: flex; flex-direction: column; gap: 14px; }
+.day { display: flex; flex-direction: column; gap: 6px; }
+.day-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.day-head h3 { font-size: 1rem; }
+.day-wins { font-size: 0.85rem; color: var(--muted); }
+.day-wins b { color: var(--ink); }
+.game { display: grid; grid-template-columns: 3.2em minmax(0, 1fr) auto; gap: 8px; align-items: start; font-size: 0.92rem; padding: 4px 0; }
+.game .time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.game .who { min-width: 0; }
+.game .who b { color: var(--good); }
+.game .sc { display: block; color: var(--muted); font-size: 0.82rem; overflow-wrap: anywhere; }
+.game .del { border: 0; background: none; color: var(--muted); font-size: 0.8rem; padding: 2px 4px; text-decoration: underline; }
+.game .del.armed { color: var(--red); }
+.pill { display: inline-block; font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; margin-left: 4px; color: var(--muted); }
+.btn[aria-pressed="true"] { border-color: var(--good); color: var(--good); }
 @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
 </style>
 
@@ -202,10 +228,13 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
       <div class="meta" id="meta"></div>
     </div>
     <div class="actions">
+      <button class="btn" id="btnWake" type="button" aria-pressed="false" title="Ekran se neće sam ugasiti ni zaključati dok je aplikacija otvorena">Ekran upaljen</button>
       <button class="btn" id="btnRules" type="button">Pravila</button>
       <button class="btn" id="btnNew" type="button">Nova igra</button>
     </div>
   </header>
+
+  <p class="hint" id="wakeMsg" hidden></p>
 
   <div id="banner" hidden></div>
 
@@ -270,6 +299,19 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
       <button class="btn" id="btnCancel" type="button" hidden>Odustani</button>
       <button class="btn danger" id="btnDelete" type="button" hidden>Obriši ruku</button>
     </div>
+  </section>
+
+  <section class="card" id="hist" aria-labelledby="histTitle">
+    <div class="card-head">
+      <h2 id="histTitle">Povijest pobjeda</h2>
+      <span class="dealer" id="histStatus"></span>
+    </div>
+    <div class="filters">
+      <div class="field"><label for="fTrio">Društvo</label><select id="fTrio"></select></div>
+      <div class="field"><label for="fDay">Dan</label><select id="fDay"></select></div>
+    </div>
+    <div id="histSummary"></div>
+    <div class="days" id="histList"></div>
   </section>
 
   <details class="rules" id="rules">
@@ -364,10 +406,15 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     <div class="field">
       <label>Igrači, redom kako sjede (smjer igre)</label>
       <div class="names">
-        <input type="text" id="n0" maxlength="14" aria-label="Igrač 1">
-        <input type="text" id="n1" maxlength="14" aria-label="Igrač 2">
-        <input type="text" id="n2" maxlength="14" aria-label="Igrač 3">
+        <input type="text" id="n0" maxlength="14" aria-label="Igrač 1" list="knownNames" autocomplete="off">
+        <input type="text" id="n1" maxlength="14" aria-label="Igrač 2" list="knownNames" autocomplete="off">
+        <input type="text" id="n2" maxlength="14" aria-label="Igrač 3" list="knownNames" autocomplete="off">
       </div>
+      <datalist id="knownNames"></datalist>
+    </div>
+    <div class="field" id="recentBox" hidden>
+      <label>Nedavna društva</label>
+      <div class="seg" id="recentSeg"></div>
     </div>
     <div class="field">
       <label for="target">Igra se do</label>
@@ -418,6 +465,8 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
   try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; }
   if (!state || !Array.isArray(state.players) || state.players.length !== 3) state = example();
 
+  const newId = () => "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  if (!state.id) state.id = newId();
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
 
   // ---- scoring ----
@@ -716,7 +765,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     if (error) return;
     if (editIndex >= 0) state.hands[editIndex] = hand;
     else state.hands.push(hand);
-    save(); clearForm(); render();
+    save(); clearForm(); render(); syncRecord();
   });
   $("btnCancel").addEventListener("click", () => { clearForm(); render(); });
   $("btnDelete").addEventListener("click", () => {
@@ -728,7 +777,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     }
     b.dataset.armed = ""; b.textContent = "Obriši ruku";
     state.hands.splice(editIndex, 1);
-    save(); clearForm(); render();
+    save(); clearForm(); render(); syncRecord();
   });
 
   function pickRow(e) {
@@ -743,6 +792,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     if (e.target.id === "btnStart") openDialog();
     if (e.target.id === "btnRematch") {
       state.hands = []; state.firstDealer = (state.firstDealer + 1) % 3;
+      state.id = newId(); state.recorded = null;
       save(); clearForm(); buildForm(); render();
     }
   });
@@ -767,6 +817,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     $("padRule").value = state.padRule;
     $("firstDealer").value = "0";
     fillDealerSelect();
+    fillRecent();
     if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
     setTimeout(() => $("n0").focus(), 30);
   }
@@ -783,14 +834,254 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
         firstDealer: Number($("firstDealer").value),
         padRule: $("padRule").value,
         hands: [],
+        id: newId(),
+        recorded: null,
       };
+      fTrio = null; fDay = "";
       save(); clearForm(); buildForm(); render();
     }
     if (typeof dlg.close === "function") dlg.close(); else dlg.removeAttribute("open");
   });
 
+  // ---- history of finished games ----
+  const HKEY = "bela-u-troje-history-v1";
+  let history = [];
+  let histDb = null;
+  let histStatus = "loading";
+  let histNote = "";
+  let fTrio = null, fDay = "";
+
+  const localHist = {
+    load() { try { const v = JSON.parse(localStorage.getItem(HKEY)); return Array.isArray(v) ? v : []; } catch (e) { return []; } },
+    save(list) { try { localStorage.setItem(HKEY, JSON.stringify(list)); } catch (e) {} },
+  };
+  const trioKey = (ps) => ps.map((x) => String(x).trim()).sort((a, b) => a.localeCompare(b, "hr")).join(" · ");
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const dayKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  function dayLabel(k) {
+    const today = new Date();
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const [yy, mm, dd] = k.split("-").map(Number);
+    const d = new Date(yy, mm - 1, dd);
+    const opts = { weekday: "long", day: "numeric", month: "long" };
+    if (yy !== today.getFullYear()) opts.year = "numeric";
+    let txt;
+    try { txt = d.toLocaleDateString("hr-HR", opts); } catch (e) { txt = `${dd}. ${mm}. ${yy}.`; }
+    if (k === dayKey(today)) return "Danas, " + txt;
+    if (k === dayKey(y)) return "Jučer, " + txt;
+    return txt.charAt(0).toUpperCase() + txt.slice(1);
+  }
+  const validRec = (r) => r && Array.isArray(r.players) && r.players.length === 3 && typeof r.winner === "string" &&
+    typeof r.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.day) && Array.isArray(r.scores);
+
+  let resolveReady;
+  const histReady = new Promise((r) => (resolveReady = r));
+
+  async function initHistory() {
+    let db = null;
+    try { db = window.claude && typeof window.claude.use === "function" ? await window.claude.use("db") : null; } catch (e) { db = null; }
+    if (!db) {
+      histStatus = "local"; history = localHist.load().filter(validRec);
+      resolveReady(); renderHistory(); return;
+    }
+    histDb = db.collection("games");
+    resolveReady();
+    const timer = setTimeout(() => { if (histStatus === "loading") { histStatus = "slow"; renderHistory(); } }, 10000);
+    histDb.onSnapshot((snap) => {
+      history = snap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter(validRec);
+      if (!snap.metadata.fromCache) { clearTimeout(timer); histStatus = "ok"; }
+      renderHistory();
+    }, () => { clearTimeout(timer); histStatus = "error"; renderHistory(); });
+  }
+
+  async function putRecord(id, rec) {
+    await histReady;
+    if (histDb) {
+      try { await histDb.doc(id).set(rec); histNote = ""; }
+      catch (e) {
+        histNote = e && e.code === "quota_exceeded"
+          ? "Povijest je puna. Obriši stare partije pa pokušaj ponovno."
+          : "Pobjeda nije upisana u povijest jer ovdje nemaš pravo upisivanja.";
+        renderHistory();
+      }
+    } else {
+      const list = localHist.load().filter((r) => r.id !== id);
+      list.push(Object.assign({ id }, rec));
+      localHist.save(list); history = list.filter(validRec); renderHistory();
+    }
+  }
+  async function removeRecord(id) {
+    await histReady;
+    if (histDb) { try { await histDb.doc(id).delete(); } catch (e) { histNote = "Partiju nije bilo moguće obrisati."; renderHistory(); } }
+    else { const list = localHist.load().filter((r) => r.id !== id); localHist.save(list); history = list.filter(validRec); renderHistory(); }
+  }
+
+  function syncRecord() {
+    if (state.example) return;
+    const w = winner();
+    if (w >= 0) {
+      const t = totals();
+      const prev = state.recorded;
+      if (prev && prev.winner === state.players[w] && prev.scores.join() === t.join() && prev.hands === state.hands.length) return;
+      const now = new Date();
+      const rec = {
+        players: state.players.slice(),
+        trio: trioKey(state.players),
+        winner: state.players[w],
+        scores: t,
+        target: state.target,
+        hands: state.hands.length,
+        dosta: state.hands.some(isDosta),
+        finishedAt: prev ? prev.finishedAt : now.toISOString(),
+        day: prev ? prev.day : dayKey(now),
+      };
+      state.recorded = { winner: rec.winner, scores: t, hands: rec.hands, finishedAt: rec.finishedAt, day: rec.day };
+      save();
+      putRecord(state.id, rec);
+    } else if (state.recorded) {
+      state.recorded = null; save();
+      removeRecord(state.id);
+    }
+  }
+
+  function renderHistory() {
+    $("histStatus").textContent = {
+      loading: "Učitavam…",
+      slow: "Povijest se još učitava i možda nije potpuna.",
+      error: "Povijest se sada ne može učitati.",
+      local: "Sprema se na ovom uređaju.",
+      ok: "",
+    }[histStatus] || "";
+
+    const games = history.slice().sort((a, b) => String(b.finishedAt).localeCompare(String(a.finishedAt)));
+    const trios = [...new Set(games.map((g) => g.trio || trioKey(g.players)))];
+    const cur = trioKey(state.players);
+    let trio = fTrio === null ? (!state.example && trios.includes(cur) ? cur : "") : fTrio;
+    if (trio && !trios.includes(trio)) trio = "";
+    $("fTrio").innerHTML = `<option value="">Sva društva</option>` + trios.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+    $("fTrio").value = trio;
+    const byTrio = games.filter((g) => !trio || (g.trio || trioKey(g.players)) === trio);
+    const days = [...new Set(byTrio.map((g) => g.day))];
+    if (fDay && !days.includes(fDay)) fDay = "";
+    $("fDay").innerHTML = `<option value="">Svi dani</option>` + days.map((d) => `<option value="${d}">${esc(dayLabel(d))}</option>`).join("");
+    $("fDay").value = fDay;
+    $("fTrio").disabled = $("fDay").disabled = !games.length;
+    const sel = byTrio.filter((g) => !fDay || g.day === fDay);
+
+    const note = histNote ? `<p class="verdict bad" style="margin:0 0 10px">${esc(histNote)}</p>` : "";
+    if (!sel.length) {
+      $("histSummary").innerHTML = note + `<p class="small">${histStatus === "loading" ? "" : "Još nema završenih partija. Kad netko pobijedi, partija se ovdje upiše sama."}</p>`;
+      $("histList").innerHTML = "";
+      return;
+    }
+
+    const stats = new Map();
+    sel.forEach((g) => {
+      g.players.forEach((p) => { const s = stats.get(p) || { wins: 0, played: 0 }; s.played++; stats.set(p, s); });
+      const s = stats.get(g.winner); if (s) s.wins++;
+    });
+    const rows = [...stats.entries()].sort((a, b) => b[1].wins - a[1].wins || b[1].wins / b[1].played - a[1].wins / a[1].played);
+    const best = rows[0][1].wins;
+    const leaders = rows.filter((r) => r[1].wins === best).map((r) => r[0]);
+    const what = fDay ? "Pobjednik dana" : "Ukupni pobjednik";
+    const head = best === 0 ? "" : leaders.length === 1
+      ? `${what}: <b>${esc(leaders[0])}</b> (${best} ${best === 1 ? "pobjeda" : best < 5 ? "pobjede" : "pobjeda"})`
+      : `Izjednačeno: <b>${leaders.slice(0, -1).map(esc).join(", ")} i ${esc(leaders[leaders.length - 1])}</b>, po ${best}`;
+    $("histSummary").innerHTML = note + `<p class="hs-head" style="margin:0 0 8px">${head}</p>
+      <div style="overflow-x:auto"><table class="hsum"><thead><tr><th>Igrač</th><th>Pobjede</th><th>Partije</th><th>Uspjeh</th></tr></thead><tbody>` +
+      rows.map(([p, s]) => `<tr class="${s.wins === best && best > 0 ? "best" : ""}"><td>${esc(p)}</td><td>${s.wins}</td><td>${s.played}</td><td>${Math.round((s.wins / s.played) * 100)}%</td></tr>`).join("") +
+      `</tbody></table></div>`;
+
+    const groups = new Map();
+    sel.forEach((g) => { if (!groups.has(g.day)) groups.set(g.day, []); groups.get(g.day).push(g); });
+    $("histList").innerHTML = [...groups.entries()].map(([d, list]) => {
+      const w = new Map();
+      list.forEach((g) => w.set(g.winner, (w.get(g.winner) || 0) + 1));
+      const wins = [...w.entries()].sort((a, b) => b[1] - a[1]).map(([p, n]) => `${esc(p)} <b>${n}</b>`).join(" · ");
+      return `<div class="day"><div class="day-head"><h3>${esc(dayLabel(d))}</h3><span class="day-wins">${wins}</span></div>` +
+        list.map((g) => {
+          let time = "";
+          try { time = new Date(g.finishedAt).toLocaleTimeString("hr-HR", { hour: "2-digit", minute: "2-digit" }); } catch (e) {}
+          const sc = g.players.map((p, i) => `${esc(p)} ${Number(g.scores[i]) || 0}`).join(" · ");
+          return `<div class="game"><span class="time">${esc(time)}</span>
+            <span class="who"><b>${esc(g.winner)}</b> pobjeđuje${g.dosta ? '<span class="pill">dosta</span>' : ""}<span class="sc">${sc}</span></span>
+            <button type="button" class="del" data-id="${esc(g.id)}">Obriši</button></div>`;
+        }).join("") + `</div>`;
+    }).join("");
+  }
+
+  $("fTrio").addEventListener("change", () => { fTrio = $("fTrio").value; fDay = ""; renderHistory(); });
+  $("fDay").addEventListener("change", () => { fDay = $("fDay").value; renderHistory(); });
+  $("histList").addEventListener("click", (e) => {
+    const b = e.target.closest(".del"); if (!b) return;
+    if (!b.classList.contains("armed")) {
+      b.classList.add("armed"); b.textContent = "Sigurno?";
+      setTimeout(() => { b.classList.remove("armed"); b.textContent = "Obriši"; }, 3000);
+      return;
+    }
+    const id = b.dataset.id;
+    if (id === state.id) { state.recorded = null; save(); }
+    removeRecord(id);
+  });
+
+  function fillRecent() {
+    const games = history.slice().sort((a, b) => String(b.finishedAt).localeCompare(String(a.finishedAt)));
+    const seen = new Map();
+    games.forEach((g) => { const k = g.trio || trioKey(g.players); if (!seen.has(k)) seen.set(k, g.players); });
+    const recent = [...seen.values()].slice(0, 4);
+    $("recentBox").hidden = !recent.length;
+    $("recentSeg").innerHTML = recent.map((ps, i) => `<button type="button" data-r="${i}">${ps.map(esc).join(", ")}</button>`).join("");
+    $("recentSeg").onclick = (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      recent[Number(b.dataset.r)].forEach((n, i) => ($("n" + i).value = n));
+      fillDealerSelect();
+    };
+    const names = [...new Set(games.flatMap((g) => g.players))].sort((a, b) => a.localeCompare(b, "hr"));
+    $("knownNames").innerHTML = names.map((n) => `<option value="${esc(n)}"></option>`).join("");
+  }
+
+  // ---- keep the screen on ----
+  const WKEY = "bela-u-troje-wake";
+  let wakeWanted = false, wakeLock = null;
+  try { wakeWanted = localStorage.getItem(WKEY) === "1"; } catch (e) {}
+  function renderWake(msg) {
+    $("btnWake").setAttribute("aria-pressed", String(!!wakeLock));
+    $("btnWake").textContent = wakeLock ? "Ekran upaljen ✓" : "Ekran upaljen";
+    $("wakeMsg").hidden = !msg; $("wakeMsg").textContent = msg || "";
+  }
+  async function requestWake(silent) {
+    if (!("wakeLock" in navigator)) { renderWake("Ovaj preglednik ne može držati ekran upaljenim. Produži vrijeme automatskog zaključavanja u postavkama mobitela."); return; }
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; renderWake(); });
+      renderWake();
+    } catch (e) {
+      wakeLock = null;
+      renderWake(silent ? "" : "Preglednik nije dopustio da ekran ostane upaljen. Pokušaj ponovno ili produži vrijeme zaključavanja u postavkama mobitela.");
+    }
+  }
+  $("btnWake").addEventListener("click", async () => {
+    if (wakeLock) {
+      wakeWanted = false;
+      try { localStorage.setItem(WKEY, "0"); } catch (e) {}
+      const l = wakeLock; wakeLock = null; try { await l.release(); } catch (e) {}
+      renderWake();
+    } else {
+      wakeWanted = true;
+      try { localStorage.setItem(WKEY, "1"); } catch (e) {}
+      requestWake();
+    }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (wakeWanted && !wakeLock && document.visibilityState === "visible") requestWake(true);
+  });
+
   buildForm();
   render();
+  renderHistory();
+  renderWake();
+  if (wakeWanted) requestWake(true);
+  initHistory();
 })();
 </script>
 </body>
