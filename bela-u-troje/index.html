@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Bela u troje</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Kalam:wght@400;700&family=Zilla+Slab:wght@600;700&display=swap">
+<style>
+/* Layout: one narrow column like a score notebook; standings on top, the squared-paper pad in the middle, the entry form under it. */
+:root {
+  --paper: #f6f7f2;
+  --surface: #ffffff;
+  --grid: rgba(43, 89, 195, 0.10);
+  --line: #d6dae3;
+  --ink: #1d2740;
+  --muted: #5d6679;
+  --pen: #2451b8;
+  --red: #c23a2b;
+  --good: #23784a;
+  --chip: #eceff5;
+  --f-display: "Zilla Slab", Rockwell, "Roboto Slab", Georgia, serif;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-hand: "Kalam", "Comic Sans MS", "Segoe Print", cursive;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12161f; --surface: #1a1f2b; --grid: rgba(143, 176, 255, 0.07); --line: #2d3445;
+    --ink: #e7eaf1; --muted: #9aa3b5; --pen: #93b2ff; --red: #f0705f; --good: #5ec68c; --chip: #252c3b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12161f; --surface: #1a1f2b; --grid: rgba(143, 176, 255, 0.07); --line: #2d3445;
+  --ink: #e7eaf1; --muted: #9aa3b5; --pen: #93b2ff; --red: #f0705f; --good: #5ec68c; --chip: #252c3b;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.5 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+.wrap { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance; line-height: 1.15; }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.35rem; }
+h3 { font-size: 1.05rem; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--pen); outline-offset: 2px; }
+
+/* header */
+.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.top h1 .suit { color: var(--red); }
+.meta { color: var(--muted); font-size: 0.92rem; margin-top: 4px; }
+.meta b { color: var(--ink); }
+.actions { display: flex; gap: 8px; }
+.btn {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
+  padding: 8px 14px; font-weight: 700; font-size: 0.95rem;
+}
+.btn.primary { background: var(--pen); border-color: var(--pen); color: var(--paper); }
+.btn.danger { color: var(--red); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.banner {
+  border: 1px dashed var(--muted); border-radius: 8px; padding: 10px 14px;
+  font-size: 0.92rem; color: var(--muted); display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+}
+.win { border: 2px solid var(--good); color: var(--ink); background: var(--surface); }
+.win strong { font-family: var(--f-display); font-size: 1.25rem; color: var(--good); }
+
+/* standings */
+.stand { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.p {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px 12px; min-width: 0; display: flex; flex-direction: column; gap: 2px;
+}
+.p.lead { border-color: var(--pen); }
+.p .name { font-weight: 700; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p .tag { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); min-height: 1.1em; }
+.p .total { font-family: var(--f-hand); font-weight: 700; font-size: 2.1rem; line-height: 1.1; color: var(--pen); font-variant-numeric: tabular-nums; }
+.bar { height: 5px; border-radius: 3px; background: var(--chip); overflow: hidden; margin-top: 4px; }
+.bar i { display: block; height: 100%; background: var(--pen); width: 0; transition: width .4s ease; }
+.p .left { font-size: 0.78rem; color: var(--muted); }
+
+/* pad */
+.pad {
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 18px 18px;
+  border: 1px solid var(--line); border-radius: 10px; overflow-x: auto;
+}
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { font-family: var(--f-body); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; padding: 10px 8px 8px; text-align: right; border-bottom: 2px solid var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
+th:first-child, td:first-child { text-align: left; width: 2.6em; }
+td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--grid); vertical-align: top; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--grid); }
+tbody tr.editing td { background: var(--grid); box-shadow: inset 0 0 0 0 transparent; }
+td.n { color: var(--muted); font-size: 0.8rem; padding-top: 10px; }
+.pts { font-family: var(--f-hand); font-size: 1.3rem; line-height: 1.1; color: var(--pen); }
+.pts .mark { font-family: var(--f-body); font-size: 0.8rem; margin-right: 4px; color: var(--red); }
+.pts.fell { color: var(--red); }
+.pts.zero { color: var(--muted); }
+.cum { display: block; font-size: 0.72rem; color: var(--muted); }
+.note { display: block; font-size: 0.7rem; color: var(--muted); }
+tfoot td { border-top: 3px double var(--ink); border-bottom: 0; font-family: var(--f-hand); font-weight: 700; font-size: 1.45rem; color: var(--ink); padding-block: 8px 10px; }
+tfoot td:first-child { font-family: var(--f-body); font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; padding-top: 14px; }
+.empty td { text-align: center; color: var(--muted); padding: 22px 8px; cursor: default; font-size: 0.92rem; }
+.hint { font-size: 0.8rem; color: var(--muted); margin: 6px 2px 0; }
+
+/* entry form */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.dealer { font-size: 0.85rem; color: var(--muted); }
+.lbl { font-size: 0.75rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 6px; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg button {
+  border: 1px solid var(--line); background: var(--chip); border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: 0.92rem; min-width: 0;
+}
+.seg button[aria-pressed="true"] { background: var(--pen); border-color: var(--pen); color: var(--paper); }
+.seg.suits button { font-size: 1.15rem; padding: 4px 14px; }
+.seg.suits button .r { color: var(--red); }
+.seg.suits button[aria-pressed="true"] .r { color: inherit; }
+.rows { display: flex; flex-direction: column; gap: 10px; }
+.prow { display: grid; grid-template-columns: minmax(0, 1fr) 92px 92px; gap: 8px; align-items: center; }
+.prow.head { font-size: 0.72rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.prow.head span:not(:first-child) { text-align: center; }
+.prow .who { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow .who small { display: block; font-weight: 400; color: var(--red); font-size: 0.75rem; }
+input[type="number"], input[type="text"], select {
+  width: 100%; min-width: 0; font: inherit; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+}
+input[type="number"] { font-family: var(--f-hand); font-size: 1.25rem; text-align: right; padding: 4px 10px; -moz-appearance: textfield; }
+input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"]:disabled { opacity: 0.55; }
+input.auto::placeholder { color: var(--pen); opacity: 0.6; }
+.chips { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-top: -2px; }
+.chips button { border: 0; background: var(--chip); border-radius: 6px; padding: 3px 9px; font-size: 0.8rem; font-weight: 700; color: var(--muted); }
+.chips button:hover { color: var(--ink); }
+.verdict { border-radius: 8px; padding: 10px 12px; background: var(--chip); font-size: 0.95rem; }
+.verdict.ok { color: var(--good); }
+.verdict.bad { color: var(--red); }
+.verdict b { font-family: var(--f-hand); font-size: 1.15rem; }
+.form-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.form-actions .btn.primary { flex: 1 1 160px; padding-block: 11px; }
+
+/* rules */
+details.rules { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0 16px; }
+details.rules summary { cursor: pointer; padding: 14px 0; font-family: var(--f-display); font-size: 1.35rem; font-weight: 700; list-style: none; display: flex; justify-content: space-between; }
+details.rules summary::after { content: "+"; color: var(--muted); }
+details.rules[open] summary::after { content: "–"; }
+.rules-body { padding-bottom: 16px; display: flex; flex-direction: column; gap: 14px; max-width: 65ch; }
+.rules-body p, .rules-body ul { margin: 0; }
+.rules-body ul { padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+.vals { overflow-x: auto; }
+.vals table { font-size: 0.92rem; }
+.vals th, .vals td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); max-width: none; }
+.vals th { border-bottom: 2px solid var(--ink); }
+.vals td.num, .vals th.num { text-align: right; font-family: var(--f-hand); font-size: 1.1rem; }
+.vals th.num { font-family: var(--f-body); font-size: 0.8rem; }
+.src { font-size: 0.8rem; color: var(--muted); }
+.src a { color: var(--pen); }
+
+/* new game dialog */
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); padding: 18px; width: min(440px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(10, 14, 24, 0.5); }
+dialog form { display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 0.8rem; font-weight: 700; color: var(--muted); }
+.names { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.small { font-size: 0.8rem; color: var(--muted); margin: 0; }
+
+@media (max-width: 420px) {
+  h1 { font-size: 1.7rem; }
+  .prow { grid-template-columns: minmax(0, 1fr) 78px 78px; gap: 6px; }
+  .p { padding: 8px 9px 10px; }
+  .p .total { font-size: 1.8rem; }
+  .pts { font-size: 1.15rem; }
+}
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Bela u troje <span class="suit" aria-hidden="true">♥</span></h1>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnRules" type="button">Pravila</button>
+      <button class="btn" id="btnNew" type="button">Nova igra</button>
+    </div>
+  </header>
+
+  <div id="banner" hidden></div>
+
+  <section class="stand" id="stand" aria-label="Stanje bodova"></section>
+
+  <section aria-label="Blok">
+    <div class="pad">
+      <table>
+        <thead><tr id="padHead"></tr></thead>
+        <tbody id="padBody"></tbody>
+        <tfoot><tr id="padFoot"></tr></tfoot>
+      </table>
+    </div>
+    <p class="hint">Dodirni ruku u bloku da je ispraviš ili obrišeš. Crveni znak boje stoji uz igrača koji je zvao adut, a „pao” znači da nije prošao.</p>
+  </section>
+
+  <section class="card" id="entry" aria-labelledby="entryTitle">
+    <div class="card-head">
+      <h2 id="entryTitle">Nova ruka</h2>
+      <span class="dealer" id="dealerInfo"></span>
+    </div>
+
+    <div>
+      <div class="lbl">Tko je zvao adut?</div>
+      <div class="seg" id="callerSeg"></div>
+    </div>
+
+    <div>
+      <div class="lbl">Adut <span style="text-transform:none;letter-spacing:0;font-weight:400">(nije obavezno)</span></div>
+      <div class="seg suits" id="suitSeg">
+        <button type="button" data-suit="♥" aria-pressed="false" aria-label="Herc"><span class="r">♥</span></button>
+        <button type="button" data-suit="♦" aria-pressed="false" aria-label="Karo"><span class="r">♦</span></button>
+        <button type="button" data-suit="♣" aria-pressed="false" aria-label="Tref">♣</button>
+        <button type="button" data-suit="♠" aria-pressed="false" aria-label="Pik">♠</button>
+      </div>
+    </div>
+
+    <div class="rows" id="rows"></div>
+
+    <div>
+      <div class="lbl">Štiglja (netko je odnio sve štihove, +90)</div>
+      <div class="seg" id="stigSeg"></div>
+    </div>
+
+    <div class="verdict" id="verdict" aria-live="polite"></div>
+
+    <div class="form-actions">
+      <button class="btn primary" id="btnSave" type="button">Upiši ruku</button>
+      <button class="btn" id="btnCancel" type="button" hidden>Odustani</button>
+      <button class="btn danger" id="btnDelete" type="button" hidden>Obriši ruku</button>
+    </div>
+  </section>
+
+  <details class="rules" id="rules">
+    <summary>Pravila bele u troje</summary>
+    <div class="rules-body">
+      <p>Igraju tri igrača i svatko igra za sebe. Koristi se 32 karte: 7, 8, 9, 10, dečko (J), dama (Q), kralj (K) i as (A) u četiri boje. Dijeli se i igra suprotno od kazaljke na satu, a djelitelj se mijenja svaku ruku.</p>
+
+      <div>
+        <h3>Dijeljenje i zvanje aduta</h3>
+        <ul>
+          <li>Svaki igrač dobije po 6 karata, a 2 karte idu na talon licem prema dolje.</li>
+          <li>Prvi govori igrač desno od djelitelja. Svatko može zvati adut ili reći „dalje”. Ako svi kažu dalje, djelitelj mora zvati (mus).</li>
+          <li>Nakon zvanja svatko dobije još 4 karte, pa svi imaju po 10. Zvač uzima talon i baca 2 karte (škart), a bodovi iz škarta pripadaju njemu. Neka društva talon igraju drukčije, pa se dogovorite prije igre. Na bodovanje to ne utječe jer ruka uvijek vrijedi 162.</li>
+        </ul>
+      </div>
+
+      <div>
+        <h3>Igranje</h3>
+        <ul>
+          <li>Mora se odgovoriti na boju i, ako možeš, uzeti štih jačom kartom.</li>
+          <li>Ako nemaš traženu boju, moraš rezati adutom. Ako je štih već rezan, moraš prebiti jačim adutom ako ga imaš.</li>
+          <li>Tko odnese štih, prvi igra u sljedećem.</li>
+        </ul>
+      </div>
+
+      <div class="vals">
+        <h3 style="margin-bottom:6px">Vrijednost karata</h3>
+        <table>
+          <thead><tr><th>Karta</th><th class="num">Adut</th><th class="num">Ostale boje</th></tr></thead>
+          <tbody>
+            <tr><td>Dečko (J)</td><td class="num">20</td><td class="num">2</td></tr>
+            <tr><td>Devetka (9)</td><td class="num">14</td><td class="num">0</td></tr>
+            <tr><td>As (A)</td><td class="num">11</td><td class="num">11</td></tr>
+            <tr><td>Desetka (10)</td><td class="num">10</td><td class="num">10</td></tr>
+            <tr><td>Kralj (K)</td><td class="num">4</td><td class="num">4</td></tr>
+            <tr><td>Dama (Q)</td><td class="num">3</td><td class="num">3</td></tr>
+            <tr><td>Osmica, sedmica</td><td class="num">0</td><td class="num">0</td></tr>
+          </tbody>
+        </table>
+        <p class="small" style="margin-top:6px">Karte vrijede 152 boda, a zadnji štih nosi još 10. Zato štihovi u svakoj ruci zbrajaju točno <b>162</b>.</p>
+      </div>
+
+      <div class="vals">
+        <h3 style="margin-bottom:6px">Zvanja</h3>
+        <table>
+          <thead><tr><th>Zvanje</th><th class="num">Bodovi</th></tr></thead>
+          <tbody>
+            <tr><td>Bela (kralj i dama u adutu)</td><td class="num">20</td></tr>
+            <tr><td>Terca (3 karte u nizu iste boje)</td><td class="num">20</td></tr>
+            <tr><td>Kvarta (4 u nizu)</td><td class="num">50</td></tr>
+            <tr><td>Kvinta (5 ili više u nizu)</td><td class="num">100</td></tr>
+            <tr><td>Četiri desetke, dame, kralja ili asa</td><td class="num">100</td></tr>
+            <tr><td>Četiri devetke</td><td class="num">150</td></tr>
+            <tr><td>Četiri dečka</td><td class="num">200</td></tr>
+            <tr><td>Belot (svih 8 karata jedne boje)</td><td class="num">cijela igra</td></tr>
+          </tbody>
+        </table>
+        <ul style="margin-top:8px">
+          <li>Niz ide 7, 8, 9, 10, dečko, dama, kralj, as.</li>
+          <li>Zvanja se prijavljuju prije prvog štiha. Broje se samo zvanja igrača koji ima najjače zvanje; zvanja ostalih ne vrijede. Bela se uvijek broji i prijavljuje se kad se baci prva od te dvije karte.</li>
+          <li>Štiglja: tko odnese sve štihove, dobiva dodatnih 90 bodova.</li>
+        </ul>
+      </div>
+
+      <div>
+        <h3>Prolaz i pad</h3>
+        <ul>
+          <li>Zvač aduta mora skupiti <b>više bodova od druga dva igrača zajedno</b>. Broje se štihovi i zvanja.</li>
+          <li>Ako prođe, svatko upisuje svoje bodove.</li>
+          <li>Ako ne prođe (ili ima jednako), zvač pada i upisuje 0. Ostala dvojica upisuju svoje bodove. Neka društva igraju da ostali uz svoje dobiju i pola zvačevih bodova, što možeš uključiti kod nove igre.</li>
+        </ul>
+      </div>
+
+      <div>
+        <h3>Kraj igre</h3>
+        <p>Igra se do dogovorenog broja, najčešće 701 ili 1001 bod. Pobjeđuje tko prvi pređe granicu. Ako je u istoj ruci prijeđe više igrača, pobjeđuje onaj s više bodova.</p>
+      </div>
+
+      <p class="src">Pravila se razlikuju od društva do društva. Ovaj sažetak prati <a href="https://hr.wikipedia.org/wiki/Bela" target="_blank" rel="noopener">hr.wikipedia</a> i <a href="https://belaklub.com/pravila.html" target="_blank" rel="noopener">belaklub.com</a>.</p>
+    </div>
+  </details>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlgForm">
+    <h2>Nova igra</h2>
+    <div class="field">
+      <label>Igrači, redom kako sjede (smjer igre)</label>
+      <div class="names">
+        <input type="text" id="n0" maxlength="14" aria-label="Igrač 1">
+        <input type="text" id="n1" maxlength="14" aria-label="Igrač 2">
+        <input type="text" id="n2" maxlength="14" aria-label="Igrač 3">
+      </div>
+    </div>
+    <div class="field">
+      <label for="target">Igra se do</label>
+      <select id="target">
+        <option value="501">501</option>
+        <option value="701">701</option>
+        <option value="1001">1001</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="firstDealer">Prvi dijeli</label>
+      <select id="firstDealer"></select>
+    </div>
+    <div class="field">
+      <label for="padRule">Kad zvač padne</label>
+      <select id="padRule">
+        <option value="own">Ostali upisuju samo svoje bodove</option>
+        <option value="split">Ostali dijele i zvačeve bodove</option>
+      </select>
+    </div>
+    <p class="small">Trenutna partija bit će zamijenjena novom.</p>
+    <div class="form-actions">
+      <button class="btn primary" id="dlgStart" value="start">Počni igru</button>
+      <button class="btn" value="cancel" formnovalidate>Odustani</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(() => {
+  const KEY = "bela-u-troje-v1";
+  const TOTAL = 162, STIG = 90;
+  const $ = (id) => document.getElementById(id);
+
+  const example = () => ({
+    example: true,
+    players: ["Ana", "Marko", "Ivan"],
+    target: 701, firstDealer: 0, padRule: "own",
+    hands: [
+      { caller: 1, suit: "♥", cards: [40, 92, 30], zv: [0, 20, 0], stig: -1 },
+      { caller: 2, suit: "♣", cards: [61, 35, 66], zv: [0, 0, 0], stig: -1 },
+      { caller: 0, suit: "♠", cards: [104, 26, 32], zv: [50, 0, 0], stig: -1 },
+      { caller: 1, suit: "♦", cards: [22, 118, 22], zv: [0, 20, 0], stig: -1 },
+    ],
+  });
+
+  let state;
+  try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; }
+  if (!state || !Array.isArray(state.players) || state.players.length !== 3) state = example();
+
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+
+  // ---- scoring ----
+  function handTotals(h) {
+    const cards = h.stig >= 0 ? [0, 1, 2].map((i) => (i === h.stig ? TOTAL : 0)) : h.cards;
+    return [0, 1, 2].map((i) => (cards[i] || 0) + (h.zv[i] || 0) + (h.stig === i ? STIG : 0));
+  }
+  function scoreHand(h) {
+    const raw = handTotals(h);
+    const c = h.caller;
+    const others = raw.reduce((s, v, i) => (i === c ? s : s + v), 0);
+    const pass = raw[c] > others;
+    if (pass) return { raw, pass, others, res: raw.slice() };
+    const res = raw.slice();
+    res[c] = 0;
+    if (state.padRule === "split") {
+      const a = (c + 1) % 3, b = (c + 2) % 3;
+      res[a] += Math.ceil(raw[c] / 2);
+      res[b] += Math.floor(raw[c] / 2);
+    }
+    return { raw, pass, others, res };
+  }
+  function totals(upTo = state.hands.length) {
+    const t = [0, 0, 0];
+    state.hands.slice(0, upTo).forEach((h) => scoreHand(h).res.forEach((v, i) => (t[i] += v)));
+    return t;
+  }
+  function winner() {
+    const t = totals();
+    const max = Math.max(...t);
+    if (max < state.target) return -1;
+    const top = t.filter((v) => v === max).length;
+    return top === 1 ? t.indexOf(max) : -1;
+  }
+  const dealerOf = (n) => (state.firstDealer + n) % 3;
+
+  // ---- form state ----
+  let form = { caller: null, suit: null, stig: -1 };
+  let editIndex = -1;
+
+  function buildForm() {
+    $("callerSeg").innerHTML = state.players
+      .map((p, i) => `<button type="button" data-i="${i}" aria-pressed="false">${esc(p)}</button>`).join("");
+    $("stigSeg").innerHTML = `<button type="button" data-i="-1" aria-pressed="true">Nitko</button>` +
+      state.players.map((p, i) => `<button type="button" data-i="${i}" aria-pressed="false">${esc(p)}</button>`).join("");
+    let rows = `<div class="prow head"><span>Igrač</span><span>Štihovi</span><span>Zvanja</span></div>`;
+    state.players.forEach((p, i) => {
+      rows += `<div class="prow">
+        <div class="who" id="who${i}">${esc(p)}</div>
+        <input type="number" inputmode="numeric" min="0" max="162" id="c${i}" aria-label="Štihovi, ${esc(p)}">
+        <input type="number" inputmode="numeric" min="0" step="10" id="z${i}" aria-label="Zvanja, ${esc(p)}" placeholder="0">
+        <div class="chips" data-i="${i}">
+          <button type="button" data-v="20" title="Bela ili terca">+20</button>
+          <button type="button" data-v="50" title="Kvarta">+50</button>
+          <button type="button" data-v="100" title="Kvinta ili 4 iste">+100</button>
+          <button type="button" data-v="150" title="Četiri devetke">+150</button>
+          <button type="button" data-v="200" title="Četiri dečka">+200</button>
+          <button type="button" data-v="0" title="Obriši zvanja">0</button>
+        </div>
+      </div>`;
+    });
+    $("rows").innerHTML = rows;
+  }
+
+  function readForm() {
+    const num = (id) => { const v = $(id).value.trim(); return v === "" ? null : Math.max(0, Math.round(Number(v)) || 0); };
+    let cards = [0, 1, 2].map((i) => num("c" + i));
+    const zv = [0, 1, 2].map((i) => num("z" + i) || 0);
+    let auto = -1, error = "";
+    if (form.stig >= 0) {
+      cards = [0, 1, 2].map((i) => (i === form.stig ? TOTAL : 0));
+    } else {
+      const empty = cards.map((v, i) => (v === null ? i : -1)).filter((i) => i >= 0);
+      const sum = cards.reduce((s, v) => s + (v || 0), 0);
+      if (empty.length === 1) {
+        auto = empty[0];
+        cards[auto] = TOTAL - sum;
+        if (cards[auto] < 0) error = `Štihovi su već ${sum}, a ruka vrijedi ${TOTAL}.`;
+      } else if (empty.length > 1) {
+        error = "Upiši bodove iz štihova za barem dva igrača. Treći se izračuna sam.";
+      } else if (sum !== TOTAL) {
+        error = `Štihovi moraju zbrojiti ${TOTAL}, a sada je ${sum}.`;
+      }
+    }
+    if (form.caller === null) error = error || "Odaberi tko je zvao adut.";
+    return { hand: { caller: form.caller, suit: form.suit, cards, zv, stig: form.stig }, auto, error };
+  }
+
+  function refreshForm() {
+    const { hand, auto, error } = readForm();
+    [0, 1, 2].forEach((i) => {
+      const el = $("c" + i);
+      el.disabled = form.stig >= 0;
+      if (form.stig >= 0) { el.value = ""; el.placeholder = i === form.stig ? "162" : "0"; el.classList.add("auto"); }
+      else if (i === auto && hand.cards[i] >= 0) { el.placeholder = String(hand.cards[i]); el.classList.add("auto"); }
+      else { el.placeholder = ""; el.classList.remove("auto"); }
+      $("who" + i).innerHTML = esc(state.players[i]) + (form.caller === i ? "<small>zove adut</small>" : "");
+    });
+    setPressed("callerSeg", form.caller);
+    setPressed("stigSeg", form.stig);
+    document.querySelectorAll("#suitSeg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.suit === form.suit)));
+
+    const v = $("verdict");
+    if (error) {
+      v.className = "verdict"; v.textContent = error;
+    } else {
+      const s = scoreHand(hand);
+      const name = esc(state.players[hand.caller]);
+      v.className = "verdict " + (s.pass ? "ok" : "bad");
+      v.innerHTML = s.pass
+        ? `${name} prolazi: <b>${s.raw[hand.caller]}</b> prema <b>${s.others}</b> (ostali zajedno).`
+        : `${name} pada: <b>${s.raw[hand.caller]}</b> prema <b>${s.others}</b>. Upisuje se ${s.res.map((x, i) => `${esc(state.players[i])} ${x}`).join(", ")}.`;
+    }
+    $("btnSave").disabled = !!error;
+    $("btnSave").textContent = editIndex >= 0 ? `Spremi ${editIndex + 1}. ruku` : "Upiši ruku";
+    $("btnCancel").hidden = editIndex < 0;
+    $("btnDelete").hidden = editIndex < 0;
+    $("entryTitle").textContent = editIndex >= 0 ? `Ispravak: ${editIndex + 1}. ruka` : `${state.hands.length + 1}. ruka`;
+    const n = editIndex >= 0 ? editIndex : state.hands.length;
+    $("dealerInfo").innerHTML = `Dijeli <b>${esc(state.players[dealerOf(n)])}</b>, prvi zove <b>${esc(state.players[(dealerOf(n) + 1) % 3])}</b>`;
+  }
+
+  function clearForm() {
+    form = { caller: null, suit: null, stig: -1 };
+    editIndex = -1;
+    [0, 1, 2].forEach((i) => { $("c" + i).value = ""; $("z" + i).value = ""; });
+  }
+
+  function loadHand(i) {
+    const h = state.hands[i];
+    editIndex = i;
+    form = { caller: h.caller, suit: h.suit || null, stig: h.stig };
+    [0, 1, 2].forEach((k) => {
+      $("c" + k).value = h.stig >= 0 ? "" : h.cards[k];
+      $("z" + k).value = h.zv[k] ? h.zv[k] : "";
+    });
+  }
+
+  function setPressed(segId, val) {
+    document.querySelectorAll(`#${segId} button`).forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.i) === val)));
+  }
+
+  // ---- render ----
+  function render() {
+    const t = totals();
+    const w = winner();
+    const max = Math.max(...t);
+    const n = state.hands.length;
+    $("meta").innerHTML = `Igra do <b>${state.target}</b> · ${n} ${n % 10 === 1 && n % 100 !== 11 ? "ruka" : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? "ruke" : "ruku"}` +
+      (state.padRule === "split" ? " · pad se dijeli" : "");
+
+    const banner = $("banner");
+    if (w >= 0) {
+      banner.hidden = false;
+      banner.className = "banner win";
+      banner.innerHTML = `<span><strong>${esc(state.players[w])} pobjeđuje</strong> s ${t[w]} bodova.</span><button class="btn primary" type="button" id="btnRematch">Revanš</button>`;
+    } else if (state.example) {
+      banner.hidden = false;
+      banner.className = "banner";
+      banner.innerHTML = `<span>Ovo je primjer partije s izmišljenim igračima. Upiši svoja imena i kreni.</span><button class="btn" type="button" id="btnStart">Nova igra</button>`;
+    } else banner.hidden = true;
+
+    $("stand").innerHTML = state.players.map((p, i) => {
+      const pct = Math.min(100, (t[i] / state.target) * 100);
+      const lead = n > 0 && t[i] === max && max > 0;
+      const tag = i === w ? "pobjednik" : lead ? "vodi" : "";
+      return `<div class="p${lead ? " lead" : ""}">
+        <span class="name">${esc(p)}</span>
+        <span class="tag">${tag}</span>
+        <span class="total">${t[i]}</span>
+        <span class="bar"><i style="width:${pct}%"></i></span>
+        <span class="left">${t[i] >= state.target ? "preko granice" : `još ${state.target - t[i]}`}</span>
+      </div>`;
+    }).join("");
+
+    $("padHead").innerHTML = `<th>#</th>` + state.players.map((p) => `<th title="${esc(p)}">${esc(p)}</th>`).join("");
+    const run = [0, 0, 0];
+    $("padBody").innerHTML = n === 0
+      ? `<tr class="empty"><td colspan="4">Još nema upisanih ruku. Prva ruka upisuje se ispod.</td></tr>`
+      : state.hands.map((h, k) => {
+          const s = scoreHand(h);
+          s.res.forEach((v, i) => (run[i] += v));
+          const cells = s.res.map((v, i) => {
+            const isCaller = i === h.caller;
+            const fell = isCaller && !s.pass;
+            const mark = isCaller ? `<span class="mark" title="zvao adut">${h.suit || "♦"}</span>` : "";
+            const notes = [];
+            if (h.zv[i]) notes.push(`zv ${h.zv[i]}`);
+            if (h.stig === i) notes.push("štiglja");
+            if (fell) notes.push("pao");
+            return `<td><span class="pts${fell ? " fell" : v === 0 ? " zero" : ""}">${mark}${fell ? "—" : v}</span>` +
+              (notes.length ? `<span class="note">${notes.join(" · ")}</span>` : "") +
+              `<span class="cum">${run[i]}</span></td>`;
+          }).join("");
+          return `<tr data-k="${k}" class="${k === editIndex ? "editing" : ""}" tabindex="0" aria-label="Ruka ${k + 1}, dodirni za ispravak"><td class="n">${k + 1}</td>${cells}</tr>`;
+        }).join("");
+    $("padFoot").innerHTML = `<td>Σ</td>` + t.map((v) => `<td>${v}</td>`).join("");
+
+    $("entry").hidden = w >= 0 && editIndex < 0;
+    refreshForm();
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // ---- events ----
+  $("callerSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    form.caller = Number(b.dataset.i); refreshForm();
+  });
+  $("suitSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    form.suit = form.suit === b.dataset.suit ? null : b.dataset.suit; refreshForm();
+  });
+  $("stigSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    form.stig = Number(b.dataset.i); refreshForm();
+  });
+  $("rows").addEventListener("input", refreshForm);
+  $("rows").addEventListener("click", (e) => {
+    const b = e.target.closest(".chips button"); if (!b) return;
+    const i = b.parentElement.dataset.i, el = $("z" + i), v = Number(b.dataset.v);
+    el.value = v === 0 ? "" : (Number(el.value) || 0) + v;
+    refreshForm();
+  });
+
+  $("btnSave").addEventListener("click", () => {
+    const { hand, error } = readForm();
+    if (error) return;
+    if (editIndex >= 0) state.hands[editIndex] = hand;
+    else state.hands.push(hand);
+    save(); clearForm(); render();
+  });
+  $("btnCancel").addEventListener("click", () => { clearForm(); render(); });
+  $("btnDelete").addEventListener("click", () => {
+    const b = $("btnDelete");
+    if (b.dataset.armed !== "1") {
+      b.dataset.armed = "1"; b.textContent = "Sigurno obrisati?";
+      setTimeout(() => { b.dataset.armed = ""; b.textContent = "Obriši ruku"; }, 3000);
+      return;
+    }
+    b.dataset.armed = ""; b.textContent = "Obriši ruku";
+    state.hands.splice(editIndex, 1);
+    save(); clearForm(); render();
+  });
+
+  function pickRow(e) {
+    const tr = e.target.closest("tr[data-k]"); if (!tr) return;
+    loadHand(Number(tr.dataset.k)); render();
+    $("entry").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  }
+  $("padBody").addEventListener("click", pickRow);
+  $("padBody").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickRow(e); } });
+
+  $("banner").addEventListener("click", (e) => {
+    if (e.target.id === "btnStart") openDialog();
+    if (e.target.id === "btnRematch") {
+      state.hands = []; state.firstDealer = (state.firstDealer + 1) % 3;
+      save(); clearForm(); buildForm(); render();
+    }
+  });
+
+  $("btnRules").addEventListener("click", () => {
+    const r = $("rules"); r.open = true;
+    r.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  // ---- new game dialog ----
+  const dlg = $("dlg");
+  function fillDealerSelect() {
+    const names = [0, 1, 2].map((i) => $("n" + i).value.trim() || `Igrač ${i + 1}`);
+    const sel = $("firstDealer"), cur = sel.value || "0";
+    sel.innerHTML = names.map((n, i) => `<option value="${i}">${esc(n)}</option>`).join("");
+    sel.value = cur;
+  }
+  function openDialog() {
+    [0, 1, 2].forEach((i) => ($("n" + i).value = state.example ? "" : state.players[i]));
+    [0, 1, 2].forEach((i) => ($("n" + i).placeholder = `Igrač ${i + 1}`));
+    $("target").value = String(state.target);
+    $("padRule").value = state.padRule;
+    $("firstDealer").value = "0";
+    fillDealerSelect();
+    if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+    setTimeout(() => $("n0").focus(), 30);
+  }
+  ["n0", "n1", "n2"].forEach((id) => $(id).addEventListener("input", fillDealerSelect));
+  $("btnNew").addEventListener("click", openDialog);
+  $("dlgForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const action = e.submitter ? e.submitter.value : "start";
+    if (action === "start") {
+      state = {
+        example: false,
+        players: [0, 1, 2].map((i) => $("n" + i).value.trim() || `Igrač ${i + 1}`),
+        target: Number($("target").value),
+        firstDealer: Number($("firstDealer").value),
+        padRule: $("padRule").value,
+        hands: [],
+      };
+      save(); clearForm(); buildForm(); render();
+    }
+    if (typeof dlg.close === "function") dlg.close(); else dlg.removeAttribute("open");
+  });
+
+  buildForm();
+  render();
+})();
+</script>
+</body>
+</html>
