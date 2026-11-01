@@ -154,6 +154,8 @@ input.auto::placeholder { color: var(--pen); opacity: 0.6; }
 .verdict.ok { color: var(--good); }
 .verdict.bad { color: var(--red); }
 .verdict b { font-family: var(--f-num); font-weight: 700; }
+.verdict .btn { margin-top: 8px; display: block; color: var(--ink); }
+td.replay { text-align: center; color: var(--muted); font-style: italic; font-size: 0.9rem; padding-top: 9px; }
 .form-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .form-actions .btn.primary { flex: 1 1 160px; padding-block: 11px; }
 
@@ -258,16 +260,17 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     </div>
 
     <div>
-      <div class="lbl">Tko je zvao adut?</div>
-      <div class="seg" id="callerSeg"></div>
-    </div>
-
-    <div>
       <div class="lbl">Kako je ruka završila?</div>
       <div class="seg" id="modeSeg">
         <button type="button" data-m="full" aria-pressed="true">Odigrana do kraja</button>
         <button type="button" data-m="dosta" aria-pressed="false">Netko je rekao „dosta”</button>
+        <button type="button" data-m="replay" aria-pressed="false">Ponovi dijeljenje</button>
       </div>
+    </div>
+
+    <div id="callerBox">
+      <div class="lbl">Tko je zvao adut?</div>
+      <div class="seg" id="callerSeg"></div>
     </div>
 
     <div id="dostaBox" hidden>
@@ -275,7 +278,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
       <div class="seg" id="dostaSeg"></div>
     </div>
 
-    <div>
+    <div id="suitBox">
       <div class="lbl">Adut <span style="text-transform:none;letter-spacing:0;font-weight:400">(nije obavezno)</span></div>
       <div class="seg suits" id="suitSeg">
         <button type="button" data-suit="♥" aria-pressed="false" aria-label="Herc"><span class="r">♥</span></button>
@@ -324,6 +327,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
         <ul>
           <li>Svaki igrač dobije po 6 karata, a 2 karte idu na talon licem prema dolje.</li>
           <li>Prvi govori igrač desno od djelitelja. Svatko može zvati adut ili reći „dalje”. Ako svi kažu dalje, djelitelj mora zvati (mus).</li>
+          <li>Kad se igrači dogovore, dijeljenje se ponavlja: nitko ne dobiva bodove i isti igrač dijeli ponovno.</li>
           <li>Nakon zvanja svatko dobije još 4 karte, pa svi imaju po 10. Zvač uzima talon i baca 2 karte (škart), a bodovi iz škarta pripadaju njemu. Neka društva talon igraju drukčije, pa se dogovorite prije igre. Na bodovanje to ne utječe jer ruka uvijek vrijedi 162.</li>
         </ul>
       </div>
@@ -390,6 +394,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
         <ul>
           <li>U troje se igra do <b>701</b> boda.</li>
           <li>Pobjeđuje se na „dosta”. Igrač koji izbroji da sa svojim bodovima i onim što je skupio u toj ruci ima 701 ili više kaže „dosta” i ruka se prekida.</li>
+          <li>Ako netko kaže krivi dosta, igramo prijateljski i ponovimo dijeljenje.</li>
           <li>Igrač koji je zvao adut smije reći dosta samo ako već ima prolaz u rukama, odnosno ako je u toj ruci skupio više od pola vrijednosti ruke (162 i sva zvanja).</li>
           <li>Ako nitko ne kaže dosta, a netko na kraju ruke pređe 701, pobjeđuje onaj s najviše bodova.</li>
         </ul>
@@ -475,6 +480,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     return [0, 1, 2].map((i) => (cards[i] || 0) + (h.zv[i] || 0) + (h.stig === i ? STIG : 0));
   }
   function scoreHand(h) {
+    if (h.replay) return { raw: [0, 0, 0], pass: true, others: 0, res: [0, 0, 0], replay: true };
     if (isDosta(h)) {
       const res = [0, 0, 0];
       res[h.dosta] = (h.cards[h.dosta] || 0) + (h.zv[h.dosta] || 0);
@@ -508,7 +514,8 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     const top = t.filter((v) => v === max).length;
     return top === 1 ? t.indexOf(max) : -1;
   }
-  const dealerOf = (n) => (state.firstDealer + n) % 3;
+  // a replayed deal is dealt again by the same player
+  const dealerOf = (n) => (state.firstDealer + state.hands.slice(0, n).filter((h) => !h.replay).length) % 3;
 
   // ---- form state ----
   let form = { caller: null, suit: null, stig: -1, mode: "full", dosta: null };
@@ -558,6 +565,9 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     let cards = [0, 1, 2].map((i) => num("c" + i));
     const zv = [0, 1, 2].map((i) => num("z" + i) || 0);
     let auto = -1, error = "";
+    if (form.mode === "replay") {
+      return { hand: { replay: true, caller: null, suit: null, cards: [0, 0, 0], zv: [0, 0, 0], stig: -1, dosta: -1 }, auto, error: "" };
+    }
     if (form.mode === "dosta") {
       const d = form.dosta;
       cards = [0, 0, 0];
@@ -601,8 +611,10 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
       if (!dc.enough) error = `${nm} ima ${dc.before} + ${dc.pts} = ${dc.sum}, a treba ${state.target}. Taj dosta nije točan.`;
       else if (!dc.safe) error = `${nm} zove adut i u ovoj ruci ima ${dc.pts}. Zvač smije reći dosta tek kad ima više od pola ruke (više od ${dc.half}).`;
     }
+    const replayMode = form.mode === "replay";
+    ["callerBox", "suitBox", "rows"].forEach((id) => ($(id).hidden = replayMode));
     $("dostaBox").hidden = !dostaMode;
-    $("stigBox").hidden = dostaMode;
+    $("stigBox").hidden = dostaMode || replayMode;
     $("cardsHead").textContent = dostaMode ? "Do sada" : "Štihovi";
     document.querySelectorAll("#modeSeg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.m === form.mode)));
     setPressed("dostaSeg", form.dosta);
@@ -621,7 +633,12 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
 
     const v = $("verdict");
     if (error) {
-      v.className = "verdict" + (dc ? " bad" : ""); v.textContent = error;
+      v.className = "verdict" + (dc ? " bad" : "");
+      v.innerHTML = esc(error) + (dc ? ` Igramo prijateljski? <button type="button" class="btn" id="btnToReplay">Ponovi dijeljenje</button>` : "");
+    } else if (replayMode) {
+      const di = dealerOf(editIndex >= 0 ? editIndex : state.hands.length);
+      v.className = "verdict";
+      v.innerHTML = `Dijeljenje se ponavlja. Nitko ne dobiva bodove, a <b style="font-family:inherit">${esc(state.players[di])}</b> ponovno dijeli.`;
     } else if (dc) {
       const nm = esc(state.players[hand.dosta]);
       v.className = "verdict ok";
@@ -636,7 +653,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
         : `${name} pada: <b>${s.raw[hand.caller]}</b> prema <b>${s.others}</b>. Upisuje se ${s.res.map((x, i) => `${esc(state.players[i])} ${x}`).join(", ")}.`;
     }
     $("btnSave").disabled = !!error;
-    $("btnSave").textContent = editIndex >= 0 ? `Spremi ${editIndex + 1}. ruku` : dostaMode ? "Upiši dosta" : "Upiši ruku";
+    $("btnSave").textContent = editIndex >= 0 ? `Spremi ${editIndex + 1}. ruku` : dostaMode ? "Upiši dosta" : replayMode ? "Ponovi dijeljenje" : "Upiši ruku";
     $("btnCancel").hidden = editIndex < 0;
     $("btnDelete").hidden = editIndex < 0;
     $("entryTitle").textContent = editIndex >= 0 ? `Ispravak: ${editIndex + 1}. ruka` : `${state.hands.length + 1}. ruka`;
@@ -654,7 +671,9 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     const h = state.hands[i];
     editIndex = i;
     const dm = isDosta(h);
-    form = { caller: h.caller, suit: h.suit || null, stig: dm ? -1 : h.stig, mode: dm ? "dosta" : "full", dosta: dm ? h.dosta : null };
+    form = h.replay
+      ? { caller: null, suit: null, stig: -1, mode: "replay", dosta: null }
+      : { caller: h.caller, suit: h.suit || null, stig: dm ? -1 : h.stig, mode: dm ? "dosta" : "full", dosta: dm ? h.dosta : null };
     [0, 1, 2].forEach((k) => {
       $("c" + k).value = h.stig >= 0 || (dm && k !== h.dosta) ? "" : h.cards[k];
       $("z" + k).value = h.zv[k] ? h.zv[k] : "";
@@ -670,7 +689,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     const t = totals();
     const w = winner();
     const max = Math.max(...t);
-    const n = state.hands.length;
+    const n = state.hands.filter((h) => !h.replay).length;
     $("meta").innerHTML = `Igra do <b>${state.target}</b> · ${n} ${n % 10 === 1 && n % 100 !== 11 ? "ruka" : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? "ruke" : "ruku"}` +
       (state.padRule === "split" ? " · pad se dijeli" : "");
 
@@ -703,6 +722,10 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     $("padBody").innerHTML = n === 0
       ? `<tr class="empty"><td colspan="4">Još nema upisanih ruku. Prva ruka upisuje se ispod.</td></tr>`
       : state.hands.map((h, k) => {
+          if (h.replay) {
+            return `<tr data-k="${k}" class="${k === editIndex ? "editing" : ""}" tabindex="0" aria-label="Ruka ${k + 1}, ponovljeno dijeljenje"><td class="n">${k + 1}</td>` +
+              `<td colspan="3" class="replay">ponovljeno dijeljenje, opet dijeli ${esc(state.players[dealerOf(k)])}</td></tr>`;
+          }
           const s = scoreHand(h);
           s.res.forEach((v, i) => (run[i] += v));
           const cells = s.res.map((v, i) => {
@@ -753,6 +776,10 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     form.stig = Number(b.dataset.i); refreshForm();
   });
   $("rows").addEventListener("input", refreshForm);
+  $("verdict").addEventListener("click", (e) => {
+    if (e.target.id !== "btnToReplay") return;
+    form.mode = "replay"; form.dosta = null; form.stig = -1; refreshForm();
+  });
   $("rows").addEventListener("click", (e) => {
     const b = e.target.closest(".chips button"); if (!b) return;
     const i = b.parentElement.dataset.i, el = $("z" + i), v = Number(b.dataset.v);
