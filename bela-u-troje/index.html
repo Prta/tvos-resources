@@ -8,7 +8,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Kalam:wght@400;700&family=Zilla+Slab:wght@600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Zilla+Slab:wght@600;700&display=swap">
 <style>
 /* Layout: one narrow column like a score notebook; standings on top, the squared-paper pad in the middle, the entry form under it. */
 :root {
@@ -23,8 +23,8 @@
   --good: #23784a;
   --chip: #eceff5;
   --f-display: "Zilla Slab", Rockwell, "Roboto Slab", Georgia, serif;
-  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
-  --f-hand: "Kalam", "Comic Sans MS", "Segoe Print", cursive;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-num: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -44,6 +44,7 @@ body {
   background: var(--paper);
   color: var(--ink);
   font: 16px/1.5 var(--f-body);
+  font-variant-numeric: lining-nums;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-block: 20px 48px;
@@ -86,7 +87,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .p.lead { border-color: var(--pen); }
 .p .name { font-weight: 700; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .p .tag { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); min-height: 1.1em; }
-.p .total { font-family: var(--f-hand); font-weight: 700; font-size: 2.1rem; line-height: 1.1; color: var(--pen); font-variant-numeric: tabular-nums; }
+.p .total { font-family: var(--f-num); font-weight: 700; font-size: 2.1rem; line-height: 1.1; color: var(--pen); font-variant-numeric: tabular-nums; }
 .bar { height: 5px; border-radius: 3px; background: var(--chip); overflow: hidden; margin-top: 4px; }
 .bar i { display: block; height: 100%; background: var(--pen); width: 0; transition: width .4s ease; }
 .p .left { font-size: 0.78rem; color: var(--muted); }
@@ -108,13 +109,13 @@ tbody tr { cursor: pointer; }
 tbody tr:hover td { background: var(--grid); }
 tbody tr.editing td { background: var(--grid); box-shadow: inset 0 0 0 0 transparent; }
 td.n { color: var(--muted); font-size: 0.8rem; padding-top: 10px; }
-.pts { font-family: var(--f-hand); font-size: 1.3rem; line-height: 1.1; color: var(--pen); }
+.pts { font-family: var(--f-num); font-weight: 600; font-size: 1.2rem; line-height: 1.2; color: var(--pen); }
 .pts .mark { font-family: var(--f-body); font-size: 0.8rem; margin-right: 4px; color: var(--red); }
 .pts.fell { color: var(--red); }
 .pts.zero { color: var(--muted); }
 .cum { display: block; font-size: 0.72rem; color: var(--muted); }
 .note { display: block; font-size: 0.7rem; color: var(--muted); }
-tfoot td { border-top: 3px double var(--ink); border-bottom: 0; font-family: var(--f-hand); font-weight: 700; font-size: 1.45rem; color: var(--ink); padding-block: 8px 10px; }
+tfoot td { border-top: 3px double var(--ink); border-bottom: 0; font-family: var(--f-num); font-weight: 700; font-size: 1.45rem; color: var(--ink); padding-block: 8px 10px; }
 tfoot td:first-child { font-family: var(--f-body); font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; padding-top: 14px; }
 .empty td { text-align: center; color: var(--muted); padding: 22px 8px; cursor: default; font-size: 0.92rem; }
 .hint { font-size: 0.8rem; color: var(--muted); margin: 6px 2px 0; }
@@ -142,7 +143,7 @@ input[type="number"], input[type="text"], select {
   width: 100%; min-width: 0; font: inherit; color: var(--ink); background: var(--paper);
   border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
 }
-input[type="number"] { font-family: var(--f-hand); font-size: 1.25rem; text-align: right; padding: 4px 10px; -moz-appearance: textfield; }
+input[type="number"] { font-family: var(--f-num); font-weight: 600; font-size: 1.2rem; text-align: right; padding: 4px 10px; -moz-appearance: textfield; }
 input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"]:disabled { opacity: 0.55; }
 input.auto::placeholder { color: var(--pen); opacity: 0.6; }
@@ -152,7 +153,7 @@ input.auto::placeholder { color: var(--pen); opacity: 0.6; }
 .verdict { border-radius: 8px; padding: 10px 12px; background: var(--chip); font-size: 0.95rem; }
 .verdict.ok { color: var(--good); }
 .verdict.bad { color: var(--red); }
-.verdict b { font-family: var(--f-hand); font-size: 1.15rem; }
+.verdict b { font-family: var(--f-num); font-weight: 700; }
 .form-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .form-actions .btn.primary { flex: 1 1 160px; padding-block: 11px; }
 
@@ -168,7 +169,7 @@ details.rules[open] summary::after { content: "–"; }
 .vals table { font-size: 0.92rem; }
 .vals th, .vals td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); max-width: none; }
 .vals th { border-bottom: 2px solid var(--ink); }
-.vals td.num, .vals th.num { text-align: right; font-family: var(--f-hand); font-size: 1.1rem; }
+.vals td.num, .vals th.num { text-align: right; font-family: var(--f-num); font-weight: 600; font-variant-numeric: tabular-nums; }
 .vals th.num { font-family: var(--f-body); font-size: 0.8rem; }
 .src { font-size: 0.8rem; color: var(--muted); }
 .src a { color: var(--pen); }
@@ -233,6 +234,19 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     </div>
 
     <div>
+      <div class="lbl">Kako je ruka završila?</div>
+      <div class="seg" id="modeSeg">
+        <button type="button" data-m="full" aria-pressed="true">Odigrana do kraja</button>
+        <button type="button" data-m="dosta" aria-pressed="false">Netko je rekao „dosta”</button>
+      </div>
+    </div>
+
+    <div id="dostaBox" hidden>
+      <div class="lbl">Tko je rekao dosta?</div>
+      <div class="seg" id="dostaSeg"></div>
+    </div>
+
+    <div>
       <div class="lbl">Adut <span style="text-transform:none;letter-spacing:0;font-weight:400">(nije obavezno)</span></div>
       <div class="seg suits" id="suitSeg">
         <button type="button" data-suit="♥" aria-pressed="false" aria-label="Herc"><span class="r">♥</span></button>
@@ -244,7 +258,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
 
     <div class="rows" id="rows"></div>
 
-    <div>
+    <div id="stigBox">
       <div class="lbl">Štiglja (netko je odnio sve štihove, +90)</div>
       <div class="seg" id="stigSeg"></div>
     </div>
@@ -330,8 +344,13 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
       </div>
 
       <div>
-        <h3>Kraj igre</h3>
-        <p>Igra se do dogovorenog broja, najčešće 701 ili 1001 bod. Pobjeđuje tko prvi pređe granicu. Ako je u istoj ruci prijeđe više igrača, pobjeđuje onaj s više bodova.</p>
+        <h3>Kraj igre i „dosta”</h3>
+        <ul>
+          <li>U troje se igra do <b>701</b> boda.</li>
+          <li>Pobjeđuje se na „dosta”. Igrač koji izbroji da sa svojim bodovima i onim što je skupio u toj ruci ima 701 ili više kaže „dosta” i ruka se prekida.</li>
+          <li>Igrač koji je zvao adut smije reći dosta samo ako već ima prolaz u rukama, odnosno ako je u toj ruci skupio više od pola vrijednosti ruke (162 i sva zvanja).</li>
+          <li>Ako nitko ne kaže dosta, a netko na kraju ruke pređe 701, pobjeđuje onaj s najviše bodova.</li>
+        </ul>
       </div>
 
       <p class="src">Pravila se razlikuju od društva do društva. Ovaj sažetak prati <a href="https://hr.wikipedia.org/wiki/Bela" target="_blank" rel="noopener">hr.wikipedia</a> i <a href="https://belaklub.com/pravila.html" target="_blank" rel="noopener">belaklub.com</a>.</p>
@@ -353,8 +372,8 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     <div class="field">
       <label for="target">Igra se do</label>
       <select id="target">
+        <option value="701">701 (uobičajeno u troje)</option>
         <option value="501">501</option>
-        <option value="701">701</option>
         <option value="1001">1001</option>
       </select>
     </div>
@@ -407,6 +426,11 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     return [0, 1, 2].map((i) => (cards[i] || 0) + (h.zv[i] || 0) + (h.stig === i ? STIG : 0));
   }
   function scoreHand(h) {
+    if (isDosta(h)) {
+      const res = [0, 0, 0];
+      res[h.dosta] = (h.cards[h.dosta] || 0) + (h.zv[h.dosta] || 0);
+      return { raw: res.slice(), pass: true, others: 0, res, dosta: true };
+    }
     const raw = handTotals(h);
     const c = h.caller;
     const others = raw.reduce((s, v, i) => (i === c ? s : s + v), 0);
@@ -427,6 +451,8 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     return t;
   }
   function winner() {
+    const dh = state.hands.find(isDosta);
+    if (dh) return dh.dosta;
     const t = totals();
     const max = Math.max(...t);
     if (max < state.target) return -1;
@@ -436,15 +462,30 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
   const dealerOf = (n) => (state.firstDealer + n) % 3;
 
   // ---- form state ----
-  let form = { caller: null, suit: null, stig: -1 };
+  let form = { caller: null, suit: null, stig: -1, mode: "full", dosta: null };
+  const isDosta = (h) => typeof h.dosta === "number" && h.dosta >= 0;
+
+  function dostaCheck(hand, index) {
+    const d = hand.dosta;
+    const before = totals(index)[d];
+    const pts = (hand.cards[d] || 0) + (hand.zv[d] || 0);
+    const sum = before + pts;
+    const value = TOTAL + hand.zv.reduce((a, b) => a + (b || 0), 0);
+    const half = value / 2;
+    const enough = sum >= state.target;
+    const safe = d !== hand.caller || pts > half;
+    return { before, pts, sum, value, half, enough, safe, ok: enough && safe };
+  }
   let editIndex = -1;
 
   function buildForm() {
     $("callerSeg").innerHTML = state.players
       .map((p, i) => `<button type="button" data-i="${i}" aria-pressed="false">${esc(p)}</button>`).join("");
+    $("dostaSeg").innerHTML = state.players
+      .map((p, i) => `<button type="button" data-i="${i}" aria-pressed="false">${esc(p)}</button>`).join("");
     $("stigSeg").innerHTML = `<button type="button" data-i="-1" aria-pressed="true">Nitko</button>` +
       state.players.map((p, i) => `<button type="button" data-i="${i}" aria-pressed="false">${esc(p)}</button>`).join("");
-    let rows = `<div class="prow head"><span>Igrač</span><span>Štihovi</span><span>Zvanja</span></div>`;
+    let rows = `<div class="prow head"><span>Igrač</span><span id="cardsHead">Štihovi</span><span>Zvanja</span></div>`;
     state.players.forEach((p, i) => {
       rows += `<div class="prow">
         <div class="who" id="who${i}">${esc(p)}</div>
@@ -468,6 +509,19 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     let cards = [0, 1, 2].map((i) => num("c" + i));
     const zv = [0, 1, 2].map((i) => num("z" + i) || 0);
     let auto = -1, error = "";
+    if (form.mode === "dosta") {
+      const d = form.dosta;
+      cards = [0, 0, 0];
+      if (d === null) error = "Odaberi tko je rekao dosta.";
+      else {
+        const got = num("c" + d);
+        if (got === null) error = `Upiši bodove koje ${state.players[d]} do sada ima u štihovima.`;
+        else if (got > TOTAL) error = `Štihovi ne mogu biti više od ${TOTAL}.`;
+        cards[d] = got || 0;
+      }
+      if (form.caller === null) error = error || "Odaberi tko je zvao adut.";
+      return { hand: { caller: form.caller, suit: form.suit, cards, zv, stig: -1, dosta: d }, auto, error };
+    }
     if (form.stig >= 0) {
       cards = [0, 1, 2].map((i) => (i === form.stig ? TOTAL : 0));
     } else {
@@ -484,15 +538,30 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
       }
     }
     if (form.caller === null) error = error || "Odaberi tko je zvao adut.";
-    return { hand: { caller: form.caller, suit: form.suit, cards, zv, stig: form.stig }, auto, error };
+    return { hand: { caller: form.caller, suit: form.suit, cards, zv, stig: form.stig, dosta: -1 }, auto, error };
   }
 
   function refreshForm() {
-    const { hand, auto, error } = readForm();
+    let { hand, auto, error } = readForm();
+    const dostaMode = form.mode === "dosta";
+    const idx = editIndex >= 0 ? editIndex : state.hands.length;
+    let dc = null;
+    if (dostaMode && !error) {
+      dc = dostaCheck(hand, idx);
+      const nm = state.players[hand.dosta];
+      if (!dc.enough) error = `${nm} ima ${dc.before} + ${dc.pts} = ${dc.sum}, a treba ${state.target}. Taj dosta nije točan.`;
+      else if (!dc.safe) error = `${nm} zove adut i u ovoj ruci ima ${dc.pts}. Zvač smije reći dosta tek kad ima više od pola ruke (više od ${dc.half}).`;
+    }
+    $("dostaBox").hidden = !dostaMode;
+    $("stigBox").hidden = dostaMode;
+    $("cardsHead").textContent = dostaMode ? "Do sada" : "Štihovi";
+    document.querySelectorAll("#modeSeg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.m === form.mode)));
+    setPressed("dostaSeg", form.dosta);
     [0, 1, 2].forEach((i) => {
       const el = $("c" + i);
-      el.disabled = form.stig >= 0;
-      if (form.stig >= 0) { el.value = ""; el.placeholder = i === form.stig ? "162" : "0"; el.classList.add("auto"); }
+      el.disabled = dostaMode ? i !== form.dosta : form.stig >= 0;
+      if (dostaMode) { if (i !== form.dosta) el.value = ""; el.placeholder = ""; el.classList.remove("auto"); }
+      else if (form.stig >= 0) { el.value = ""; el.placeholder = i === form.stig ? "162" : "0"; el.classList.add("auto"); }
       else if (i === auto && hand.cards[i] >= 0) { el.placeholder = String(hand.cards[i]); el.classList.add("auto"); }
       else { el.placeholder = ""; el.classList.remove("auto"); }
       $("who" + i).innerHTML = esc(state.players[i]) + (form.caller === i ? "<small>zove adut</small>" : "");
@@ -503,7 +572,12 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
 
     const v = $("verdict");
     if (error) {
-      v.className = "verdict"; v.textContent = error;
+      v.className = "verdict" + (dc ? " bad" : ""); v.textContent = error;
+    } else if (dc) {
+      const nm = esc(state.players[hand.dosta]);
+      v.className = "verdict ok";
+      v.innerHTML = `${nm} ima <b>${dc.before}</b> + <b>${dc.pts}</b> = <b>${dc.sum}</b> i pobjeđuje.` +
+        (hand.dosta === hand.caller ? ` Prolaz je osiguran: ${dc.pts} od ${dc.value}.` : "");
     } else {
       const s = scoreHand(hand);
       const name = esc(state.players[hand.caller]);
@@ -513,7 +587,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
         : `${name} pada: <b>${s.raw[hand.caller]}</b> prema <b>${s.others}</b>. Upisuje se ${s.res.map((x, i) => `${esc(state.players[i])} ${x}`).join(", ")}.`;
     }
     $("btnSave").disabled = !!error;
-    $("btnSave").textContent = editIndex >= 0 ? `Spremi ${editIndex + 1}. ruku` : "Upiši ruku";
+    $("btnSave").textContent = editIndex >= 0 ? `Spremi ${editIndex + 1}. ruku` : dostaMode ? "Upiši dosta" : "Upiši ruku";
     $("btnCancel").hidden = editIndex < 0;
     $("btnDelete").hidden = editIndex < 0;
     $("entryTitle").textContent = editIndex >= 0 ? `Ispravak: ${editIndex + 1}. ruka` : `${state.hands.length + 1}. ruka`;
@@ -522,7 +596,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
   }
 
   function clearForm() {
-    form = { caller: null, suit: null, stig: -1 };
+    form = { caller: null, suit: null, stig: -1, mode: "full", dosta: null };
     editIndex = -1;
     [0, 1, 2].forEach((i) => { $("c" + i).value = ""; $("z" + i).value = ""; });
   }
@@ -530,9 +604,10 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
   function loadHand(i) {
     const h = state.hands[i];
     editIndex = i;
-    form = { caller: h.caller, suit: h.suit || null, stig: h.stig };
+    const dm = isDosta(h);
+    form = { caller: h.caller, suit: h.suit || null, stig: dm ? -1 : h.stig, mode: dm ? "dosta" : "full", dosta: dm ? h.dosta : null };
     [0, 1, 2].forEach((k) => {
-      $("c" + k).value = h.stig >= 0 ? "" : h.cards[k];
+      $("c" + k).value = h.stig >= 0 || (dm && k !== h.dosta) ? "" : h.cards[k];
       $("z" + k).value = h.zv[k] ? h.zv[k] : "";
     });
   }
@@ -554,7 +629,7 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
     if (w >= 0) {
       banner.hidden = false;
       banner.className = "banner win";
-      banner.innerHTML = `<span><strong>${esc(state.players[w])} pobjeđuje</strong> s ${t[w]} bodova.</span><button class="btn primary" type="button" id="btnRematch">Revanš</button>`;
+      banner.innerHTML = `<span><strong>${esc(state.players[w])} pobjeđuje</strong> s ${t[w]} bodova${state.hands.some(isDosta) ? " na dosta" : ""}.</span><button class="btn primary" type="button" id="btnRematch">Revanš</button>`;
     } else if (state.example) {
       banner.hidden = false;
       banner.className = "banner";
@@ -584,12 +659,14 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
           const cells = s.res.map((v, i) => {
             const isCaller = i === h.caller;
             const fell = isCaller && !s.pass;
+            const dash = s.dosta && i !== h.dosta;
             const mark = isCaller ? `<span class="mark" title="zvao adut">${h.suit || "♦"}</span>` : "";
             const notes = [];
             if (h.zv[i]) notes.push(`zv ${h.zv[i]}`);
             if (h.stig === i) notes.push("štiglja");
             if (fell) notes.push("pao");
-            return `<td><span class="pts${fell ? " fell" : v === 0 ? " zero" : ""}">${mark}${fell ? "—" : v}</span>` +
+            if (s.dosta && i === h.dosta) notes.push("dosta");
+            return `<td><span class="pts${fell ? " fell" : v === 0 ? " zero" : ""}">${mark}${fell || dash ? "—" : v}</span>` +
               (notes.length ? `<span class="note">${notes.join(" · ")}</span>` : "") +
               `<span class="cum">${run[i]}</span></td>`;
           }).join("");
@@ -613,6 +690,14 @@ dialog form { display: flex; flex-direction: column; gap: 14px; }
   $("suitSeg").addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
     form.suit = form.suit === b.dataset.suit ? null : b.dataset.suit; refreshForm();
+  });
+  $("modeSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    form.mode = b.dataset.m; form.stig = -1; refreshForm();
+  });
+  $("dostaSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    form.dosta = Number(b.dataset.i); refreshForm();
   });
   $("stigSeg").addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
