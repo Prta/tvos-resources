@@ -10,3 +10,12 @@ Blok za upisivanje bodova u beli za tri igrača. Jedna HTML datoteka bez ovisnos
 - Štiglja (+90), ispravak i brisanje ruku, praćenje tko dijeli.
 - Partija i povijest spremaju se u pregledniku (localStorage).
 - Sažetak pravila nalazi se na dnu stranice.
+
+## Instalacija na mobitel (bez prijave)
+
+Aplikacija je PWA: radi bez interneta i instalira se na početni zaslon.
+
+1. Na GitHubu otvori Settings → Pages, pod „Build and deployment” odaberi „Deploy from a branch”, granu s aplikacijom i mapu `/ (root)`, pa Save.
+2. Za minutu-dvije aplikacija je na `https://prta.github.io/tvos-resources/bela-u-troje/`.
+3. Android (Chrome): otvori link → izbornik ⋮ → „Instaliraj aplikaciju” / „Dodaj na početni zaslon”.
+4. iPhone (Safari): otvori link → Dijeli → „Dodaj na početni zaslon”.
