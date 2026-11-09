@@ -1,0 +1,1014 @@
+<title>Pametna košarica</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Raspored: jedan stupac kao blagajnički račun, cijene u stilu žutih etiketa s police; kartice na dnu za palac. */
+:root {
+  --bg: #f3f5f2;
+  --surface: #ffffff;
+  --ink: #17201b;
+  --muted: #5d6a62;
+  --line: #d9dfda;
+  --tag: #ffd60a;
+  --tag-ink: #1a1a12;
+  --sale: #d1222b;
+  --sale-soft: #fde8e8;
+  --save: #18794e;
+  --save-soft: #e2f3ea;
+  --coupon: #6a3fb5;
+  --coupon-soft: #efe8fa;
+  --focus: #1d5fd1;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "Barlow", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-2: 1.75rem;
+  --step-3: 2.5rem;
+  --radius: 10px;
+  --tabbar-h: 64px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101412; --surface: #1a201c; --ink: #e9efea; --muted: #9aa8a0; --line: #2d3631;
+    --tag: #f2c500; --tag-ink: #16160f; --sale: #ff6b6b; --sale-soft: #3a1c1e;
+    --save: #4fd18b; --save-soft: #16301f; --coupon: #b99af0; --coupon-soft: #2a2140; --focus: #7aa7ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101412; --surface: #1a201c; --ink: #e9efea; --muted: #9aa8a0; --line: #2d3631;
+  --tag: #f2c500; --tag-ink: #16160f; --sale: #ff6b6b; --sale-soft: #3a1c1e;
+  --save: #4fd18b; --save-soft: #16301f; --coupon: #b99af0; --coupon-soft: #2a2140; --focus: #7aa7ff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  line-height: 1.45;
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg);
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.wrap {
+  max-width: 640px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px calc(var(--tabbar-h) + 28px + env(safe-area-inset-bottom, 0px));
+  display: grid; gap: 18px;
+}
+header.top { display: grid; gap: 2px; }
+.brand { font-family: var(--font-display); font-weight: 700; font-size: var(--step-2); line-height: 1; letter-spacing: 0.01em; text-wrap: balance; }
+.brand span { background: var(--tag); color: var(--tag-ink); padding: 0 6px; border-radius: 4px; }
+.sub { color: var(--muted); font-size: var(--step--1); }
+h2 { font-family: var(--font-display); font-weight: 700; font-size: var(--step-1); margin: 0; letter-spacing: 0.01em; text-wrap: balance; }
+h3 { font-family: var(--font-display); font-weight: 600; font-size: 1.125rem; margin: 0; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: var(--step--1); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Etiketa s cijenom */
+.tag {
+  display: inline-flex; align-items: baseline; gap: 2px;
+  background: var(--tag); color: var(--tag-ink);
+  font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; line-height: 1;
+  padding: 4px 8px 3px; border-radius: 4px; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.tag.big { font-size: var(--step-3); padding: 6px 12px 4px; }
+.tag.plain { background: transparent; color: var(--ink); padding-inline: 0; }
+.old { color: var(--muted); text-decoration: line-through; font-size: var(--step--1); white-space: nowrap; }
+.badge {
+  display: inline-block; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 3px; white-space: nowrap; line-height: 1.4;
+}
+.badge.sale { background: var(--sale); color: #fff; }
+.badge.coupon { background: var(--coupon-soft); color: var(--coupon); border: 1px dashed var(--coupon); }
+.badge.example { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.badge.expired { background: transparent; color: var(--muted); border: 1px solid var(--line); text-decoration: line-through; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.section { display: grid; gap: 10px; }
+.row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.wraptext { overflow-wrap: anywhere; }
+
+/* Plan kupnje */
+.summary { padding: 16px; display: grid; gap: 12px; }
+.summary .total { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 16px; }
+.summary .label { font-size: var(--step--1); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.savebar { background: var(--save-soft); color: var(--save); border-radius: 6px; padding: 8px 10px; font-weight: 600; font-size: 0.9375rem; }
+.stop { padding: 0; overflow: hidden; }
+.stop-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px dashed var(--line); }
+.stop-name { font-family: var(--font-display); font-weight: 700; font-size: 1.375rem; line-height: 1; }
+.lines { list-style: none; margin: 0; padding: 4px 14px 10px; display: grid; }
+.line { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); align-items: center; }
+.line:last-child { border-bottom: 0; }
+.line .meta { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; grid-column: 1 / -1; }
+.line .price { text-align: right; display: grid; justify-items: end; gap: 2px; }
+.compare { list-style: none; margin: 0; padding: 0; display: grid; }
+.compare li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); align-items: center; }
+.compare li:last-child { border-bottom: 0; }
+.compare .bar { grid-column: 1 / -1; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.compare .bar i { display: block; height: 100%; background: var(--muted); opacity: 0.45; border-radius: 3px; }
+.compare li.best .bar i { background: var(--save); opacity: 1; }
+
+/* Popis */
+.item { padding: 12px 14px; display: grid; gap: 8px; }
+.item + .item { border-top: 1px solid var(--line); }
+.item-top { display: flex; gap: 10px; align-items: flex-start; }
+.item-name { font-weight: 600; overflow-wrap: anywhere; }
+.qty { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; flex: none; }
+.qty button { background: transparent; border: 0; width: 34px; height: 32px; font-size: 1.125rem; font-weight: 600; }
+.qty span { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+.prices { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.prices li { display: grid; grid-template-columns: 6.5rem 1fr auto; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px dotted var(--line); }
+.prices li.cheapest .store { font-weight: 700; }
+.prices .what { font-size: var(--step--1); color: var(--muted); overflow-wrap: anywhere; min-width: 0; }
+.prices .amt { text-align: right; display: grid; justify-items: end; }
+.alts { display: grid; gap: 4px; }
+.alt { display: flex; gap: 8px; align-items: center; font-size: var(--step--1); }
+.alt .grow { overflow-wrap: anywhere; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+  padding: 9px 14px; font-weight: 600; min-height: 40px;
+}
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.ghost { background: transparent; }
+.btn.danger { color: var(--sale); }
+.btn.small { padding: 5px 10px; min-height: 32px; font-size: var(--step--1); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--focus); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+.search { position: relative; }
+.search input {
+  width: 100%; border: 2px solid var(--ink); border-radius: 10px; padding: 12px 14px; background: var(--surface);
+  font-size: 1.0625rem;
+}
+.results { list-style: none; margin: 0; padding: 0; display: grid; }
+.result { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); align-items: center; }
+.result:last-child { border-bottom: 0; }
+.result .meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.result.unavailable { opacity: 0.6; }
+
+.notice { padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); display: grid; gap: 8px; }
+.notice.example { border-style: dashed; }
+.empty { padding: 22px 16px; text-align: center; display: grid; gap: 10px; justify-items: center; }
+
+/* Kuponi */
+.coupon { position: relative; padding: 12px 14px; border: 2px dashed var(--coupon); border-radius: var(--radius); background: var(--coupon-soft); display: grid; gap: 6px; }
+.coupon.is-expired { border-color: var(--line); background: var(--surface); opacity: 0.75; }
+.coupon-value { font-family: var(--font-display); font-weight: 700; font-size: var(--step-2); line-height: 1; color: var(--coupon); }
+.form { display: grid; gap: 10px; padding: 14px; }
+.field { display: grid; gap: 4px; }
+.field label { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
+.field input, .field select { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; background: var(--surface); min-height: 40px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 380px) { .two { grid-template-columns: 1fr; } }
+
+/* Trgovine */
+.stores { list-style: none; margin: 0; padding: 0; }
+.stores li { border-bottom: 1px solid var(--line); }
+.stores li:last-child { border-bottom: 0; }
+.stores label { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
+.stores input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--save); flex: none; }
+
+/* Donja traka s karticama */
+nav.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);
+}
+nav.tabs .inner { max-width: 640px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
+nav.tabs button {
+  background: none; border: 0; height: var(--tabbar-h); display: grid; place-items: center; align-content: center; gap: 2px;
+  font-size: 0.75rem; font-weight: 600; color: var(--muted); position: relative;
+}
+nav.tabs button svg { width: 24px; height: 24px; }
+nav.tabs button[aria-selected="true"] { color: var(--ink); }
+nav.tabs button[aria-selected="true"]::after { content: ""; position: absolute; top: 0; left: 25%; right: 25%; height: 3px; background: var(--tag); border-radius: 0 0 3px 3px; }
+nav.tabs .count { position: absolute; top: 8px; left: calc(50% + 6px); background: var(--sale); color: #fff; font-size: 0.625rem; border-radius: 999px; padding: 0 5px; line-height: 1.5; }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 30;
+  bottom: calc(var(--tabbar-h) + 14px + env(safe-area-inset-bottom, 0px));
+  background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 0.9375rem;
+  max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+}
+.skeleton { height: 14px; border-radius: 4px; background: var(--line); }
+.loading { padding: 18px 16px; display: grid; gap: 10px; }
+.status { font-size: var(--step--1); color: var(--muted); }
+.status.warn { color: var(--sale); }
+details.help summary { cursor: pointer; font-weight: 600; }
+details.help { padding: 12px 14px; }
+details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; }
+@media (prefers-reduced-motion: no-preference) {
+  .toast { animation: rise 0.18s ease-out; }
+  @keyframes rise { from { transform: translate(-50%, 8px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Pametna <span>košarica</span></div>
+    <p class="sub" id="dataline">Učitavam današnje cijene…</p>
+  </header>
+  <main id="view" aria-live="polite"></main>
+</div>
+
+<nav class="tabs" aria-label="Glavni izbornik">
+  <div class="inner" role="tablist">
+    <button role="tab" data-tab="plan" aria-selected="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6.2"/><circle cx="10" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/></svg>
+      Gdje kupiti
+    </button>
+    <button role="tab" data-tab="popis" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>
+      Moj popis
+    </button>
+    <button role="tab" data-tab="kuponi" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg>
+      Kuponi
+    </button>
+    <button role="tab" data-tab="trgovine" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9l1.5-5h13L20 9"/><path d="M4 9h16v2a3 3 0 0 1-5.3 1.9A3 3 0 0 1 12 14a3 3 0 0 1-2.7-1.1A3 3 0 0 1 4 11z"/><path d="M5.5 13.5V20h13v-6.5"/></svg>
+      Trgovine
+    </button>
+  </div>
+</nav>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- Konstante ----------
+  const DOC_PATH = "kosarica/glavna";
+  const LOCAL_KEY = "pametna-kosarica-v1";
+  const TAB_KEY = "pametna-kosarica-tab";
+  const MAX_RESULTS = 30;
+
+  // ---------- Stanje ----------
+  let katalog = null;          // {datum, grad, lanci, gradovi, proizvodi}
+  let byCode = new Map();      // kod -> red iz kataloga
+  let folded = null;           // nazivi bez dijakritika, za pretragu
+  let katalogError = "";
+  let state = defaultState();
+  let tab = "plan";
+  let openItem = null;         // id stavke čije su cijene otvorene
+  let addingAltFor = null;     // id stavke kojoj se dodaje zamjena
+  let searchText = "";
+  let db = null, docRef = null, dbStatus = "local", dirty = false, saving = false, saveTimer = null;
+  let couponDraft = null;      // prijedlozi kupona sa snimke zaslona
+  let sample = null, sampleImages = false, readingCoupon = null;
+
+  function defaultState() {
+    return { verzija: 1, trgovine: null, grad: "", stavke: [], kuponi: [] };
+  }
+
+  // ---------- Pomoćne funkcije ----------
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fold = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d");
+  const eur = (cents) => (cents / 100).toLocaleString("hr-HR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+  const uid = () => Math.random().toString(36).slice(2, 10);
+  const todayIso = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+  const fmtDate = (iso) => { if (!iso) return ""; const [y, m, d] = iso.split("-"); return `${+d}. ${+m}. ${y}.`; };
+  const plural = (n, one, few, many) => { const a = n % 10, b = n % 100; return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many; };
+
+  function toast(msg) {
+    const t = $("#toast");
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => { t.hidden = true; }, 2600);
+  }
+
+  function chains() { return katalog ? katalog.lanci : []; }
+  function chainIndex(code) { return chains().findIndex((c) => c.kod === code); }
+  function chainName(code) { const c = chains().find((x) => x.kod === code); return c ? c.naziv : code; }
+  function selectedChains() {
+    const all = chains().filter((c) => c.poslovnica > 0).map((c) => c.kod);
+    if (!state.trgovine) return all;
+    return all.filter((c) => state.trgovine.includes(c));
+  }
+
+  // Cijena proizvoda u lancu: {cijena, redovna|null} u centima, ili null.
+  function priceOf(row, chainIdx) {
+    const p = row[2][chainIdx];
+    if (p == null) return null;
+    return Array.isArray(p) ? { cijena: p[0], redovna: p[1] } : { cijena: p, redovna: null };
+  }
+
+  // ---------- Kuponi ----------
+  function couponActive(k) { return !k.vrijediDo || k.vrijediDo >= todayIso(); }
+  function couponLabel(k) {
+    if (k.vrsta === "posto") return `-${k.vrijednost}%`;
+    if (k.vrsta === "cijena") return eur(Math.round(k.vrijednost * 100));
+    if (k.vrsta === "xy") return `Kupi ${k.x}, plati ${k.y}`;
+    return "";
+  }
+  // Ukupno za količinu, s kuponom ako postoji.
+  function totalWithCoupon(unit, qty, k) {
+    if (!k) return unit * qty;
+    if (k.vrsta === "posto") return Math.round(unit * qty * (100 - k.vrijednost) / 100);
+    if (k.vrsta === "cijena") return Math.min(unit, Math.round(k.vrijednost * 100)) * qty;
+    if (k.vrsta === "xy" && k.x > 0 && k.y >= 0 && k.y < k.x) {
+      const groups = Math.floor(qty / k.x);
+      return (qty - groups * (k.x - k.y)) * unit;
+    }
+    return unit * qty;
+  }
+
+  // Najbolja ponuda stavke u jednom lancu: uzima najjeftiniji proizvod iz stavke i primijeni kupon.
+  function offerAt(item, code) {
+    const idx = chainIndex(code);
+    if (idx < 0) return null;
+    const coupons = state.kuponi.filter((k) => k.lanac === code && k.stavka === item.id && couponActive(k));
+    let best = null;
+    for (const kod of item.kodovi) {
+      const row = byCode.get(kod);
+      if (!row) continue;
+      const p = priceOf(row, idx);
+      if (!p) continue;
+      const options = [null, ...coupons];
+      for (const k of options) {
+        const total = totalWithCoupon(p.cijena, item.kom, k);
+        if (!best || total < best.ukupno) {
+          best = { lanac: code, kod, naziv: row[1], cijena: p.cijena, redovna: p.redovna, ukupno: total, kupon: k, bezKupona: p.cijena * item.kom };
+        }
+      }
+    }
+    return best;
+  }
+
+  function computePlan() {
+    const sel = selectedChains();
+    const perItem = state.stavke.map((item) => {
+      const offers = sel.map((c) => offerAt(item, c)).filter(Boolean).sort((a, b) => a.ukupno - b.ukupno);
+      return { item, offers, best: offers[0] || null };
+    });
+    // Kad je ista najniža cijena u više trgovina, biraj trgovinu u kojoj se ionako kupuje više stvari.
+    const score = new Map();
+    for (const r of perItem) {
+      if (!r.best) continue;
+      for (const o of r.offers) if (o.ukupno === r.best.ukupno) score.set(o.lanac, (score.get(o.lanac) || 0) + 1);
+    }
+    for (const r of perItem) {
+      if (!r.best) continue;
+      const ties = r.offers.filter((o) => o.ukupno === r.best.ukupno);
+      r.best = ties.reduce((a, b) => ((score.get(b.lanac) || 0) > (score.get(a.lanac) || 0) ? b : a), ties[0]);
+      r.offers = [r.best, ...r.offers.filter((o) => o !== r.best)];
+    }
+    const stops = new Map();
+    let total = 0, missing = [];
+    for (const r of perItem) {
+      if (!r.best) { missing.push(r.item); continue; }
+      total += r.best.ukupno;
+      if (!stops.has(r.best.lanac)) stops.set(r.best.lanac, []);
+      stops.get(r.best.lanac).push(r);
+    }
+    const single = sel.map((c) => {
+      let sum = 0, have = 0;
+      for (const r of perItem) {
+        const o = r.offers.find((x) => x.lanac === c);
+        if (o) { sum += o.ukupno; have++; }
+      }
+      return { lanac: c, ukupno: sum, ima: have, nema: perItem.length - have };
+    }).sort((a, b) => (a.nema - b.nema) || (a.ukupno - b.ukupno));
+    return { perItem, stops, total, missing, single };
+  }
+
+  // ---------- Spremanje ----------
+  function loadLocal() {
+    try { const raw = localStorage.getItem(LOCAL_KEY); if (raw) return JSON.parse(raw); } catch (e) {}
+    return null;
+  }
+  function saveLocal() {
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+  function commit(msg) {
+    dirty = true;
+    saveLocal();
+    render();
+    if (msg) toast(msg);
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flush, 500);
+  }
+  async function flush() {
+    if (!docRef || saving) return;
+    saving = true;
+    try {
+      while (dirty) {
+        dirty = false;
+        await docRef.set(JSON.parse(JSON.stringify(state)));
+      }
+      setDbStatus("saved");
+    } catch (e) {
+      setDbStatus(e && e.code === "invalid_argument" ? "readonly" : "error");
+    } finally {
+      saving = false;
+    }
+  }
+  function setDbStatus(s) { dbStatus = s; const el = $("#savestate"); if (el) el.replaceWith(saveStateEl()); }
+  function saveStateEl() {
+    const span = document.createElement("span");
+    span.id = "savestate";
+    const map = {
+      local: "Spremljeno na ovom uređaju.",
+      connecting: "Povezujem spremanje…",
+      saved: "Popis je spremljen i vidiš ga na svakom uređaju.",
+      slow: "Spremanje se još ne javlja. Promjene se zasad čuvaju na ovom uređaju.",
+      error: "Spremanje trenutno ne radi. Promjene se zasad čuvaju na ovom uređaju.",
+      readonly: "Ovaj popis možeš samo gledati.",
+    };
+    span.textContent = map[dbStatus] || "";
+    span.className = "status" + (dbStatus === "error" || dbStatus === "slow" ? " warn" : "");
+    return span;
+  }
+
+  async function connectDb() {
+    if (!window.claude || typeof window.claude.use !== "function") { setDbStatus("local"); return; }
+    setDbStatus("connecting");
+    let slowTimer = setTimeout(() => setDbStatus("slow"), 10000);
+    try { db = await window.claude.use("db"); } catch (e) { db = null; }
+    if (!db) { clearTimeout(slowTimer); setDbStatus("local"); return; }
+    docRef = db.doc(DOC_PATH);
+    let first = true;
+    docRef.onSnapshot((snap) => {
+      if (!snap.metadata.fromCache) { clearTimeout(slowTimer); if (dbStatus !== "error") setDbStatus("saved"); }
+      if (snap.exists) {
+        const data = snap.data();
+        if (!dirty && !saving && JSON.stringify(data) !== JSON.stringify(state)) {
+          state = Object.assign(defaultState(), JSON.parse(JSON.stringify(data)));
+          saveLocal();
+          render();
+        }
+      } else if (first && !snap.metadata.fromCache && (state.stavke.length || state.kuponi.length || state.trgovine)) {
+        dirty = true; flush();   // prvi put: prenesi popis s ovog uređaja
+      }
+      if (!snap.metadata.fromCache) first = false;
+    }, (err) => { clearTimeout(slowTimer); setDbStatus("error"); });
+  }
+
+  async function connectSample() {
+    if (!window.claude || typeof window.claude.use !== "function") return;
+    try { sample = await window.claude.use("sample"); } catch (e) { sample = null; }
+    if (!sample) return;
+    try { const lim = await sample.limits(); sampleImages = !!(lim && lim.images); } catch (e) { sampleImages = false; }
+    if (tab === "kuponi") render();
+  }
+
+  // ---------- Katalog ----------
+  async function loadKatalog() {
+    try {
+      const res = await fetch("katalog.json", { cache: "no-cache" });
+      if (!res.ok) throw new Error("http " + res.status);
+      let text;
+      const buf = await res.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+        if (typeof DecompressionStream === "undefined") throw new Error("nogzip");
+        const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"));
+        text = await new Response(stream).text();
+      } else {
+        text = new TextDecoder().decode(bytes);   // poslužitelj ga je već raspakirao
+      }
+      katalog = JSON.parse(text);
+      byCode = new Map(katalog.proizvodi.map((r) => [r[0], r]));
+      const label = katalog.grad ? `poslovnice u gradu ${katalog.grad}` : "cijela Hrvatska";
+      $("#dataline").textContent = `Cijene iz službenih cjenika od ${fmtDate(katalog.datum)} · ${label}`;
+    } catch (e) {
+      katalogError = e && e.message === "nogzip"
+        ? "Ovaj preglednik je prestar za učitavanje cijena. Otvori stranicu u novijem pregledniku."
+        : "Cijene se nisu učitale. Provjeri internetsku vezu i otvori stranicu ponovno.";
+      $("#dataline").textContent = katalogError;
+    }
+    render();
+  }
+  function ensureFolded() {
+    if (!folded && katalog) folded = katalog.proizvodi.map((r) => fold(r[1]));
+  }
+  function search(q) {
+    ensureFolded();
+    const toks = fold(q).split(/\s+/).filter(Boolean);
+    if (!toks.length || !folded) return [];
+    const sel = selectedChains().map(chainIndex);
+    const out = [];
+    for (let i = 0; i < folded.length && out.length < 400; i++) {
+      if (toks.every((t) => folded[i].includes(t))) out.push(i);
+    }
+    const score = (i) => {
+      const r = katalog.proizvodi[i];
+      const inSel = sel.filter((ix) => r[2][ix] != null).length;
+      const starts = folded[i].startsWith(toks[0]) ? 1 : 0;
+      return inSel * 10 + starts * 3 - r[1].length / 100;
+    };
+    return out.map((i) => [score(i), katalog.proizvodi[i]]).sort((a, b) => b[0] - a[0]).slice(0, MAX_RESULTS).map((x) => x[1]);
+  }
+  function cheapestSelected(row) {
+    let best = null;
+    for (const code of selectedChains()) {
+      const p = priceOf(row, chainIndex(code));
+      if (p && (!best || p.cijena < best.cijena)) best = { ...p, lanac: code };
+    }
+    return best;
+  }
+
+  // ---------- Prikaz ----------
+  function render() {
+    document.querySelectorAll("nav.tabs button").forEach((b) => {
+      b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+    });
+    const kuponBtn = document.querySelector('nav.tabs button[data-tab="kuponi"]');
+    const active = state.kuponi.filter(couponActive).length;
+    kuponBtn.querySelector(".count")?.remove();
+    if (active) kuponBtn.insertAdjacentHTML("beforeend", `<span class="count num">${active}</span>`);
+
+    const view = $("#view");
+    if (!katalog && !katalogError) { view.innerHTML = loadingHtml(); return; }
+    if (katalogError) { view.innerHTML = `<div class="notice"><p>${esc(katalogError)}</p></div>`; return; }
+    const html = { plan: planHtml, popis: popisHtml, kuponi: kuponiHtml, trgovine: trgovineHtml }[tab]();
+    const focusId = document.activeElement && document.activeElement.id;
+    const selStart = document.activeElement && document.activeElement.selectionStart;
+    view.innerHTML = html;
+    const status = $("#savestate-slot");
+    if (status) status.replaceWith(saveStateEl());
+    if (focusId) {
+      const el = document.getElementById(focusId);
+      if (el) { el.focus(); if (selStart != null && el.setSelectionRange) try { el.setSelectionRange(selStart, selStart); } catch (e) {} }
+    }
+  }
+
+  function loadingHtml() {
+    return `<div class="card loading" aria-busy="true">
+      <p class="muted small">Učitavam cijene iz 8 trgovačkih lanaca…</p>
+      <div class="skeleton" style="width:70%"></div><div class="skeleton" style="width:55%"></div><div class="skeleton" style="width:62%"></div>
+    </div>`;
+  }
+
+  function exampleNotice() {
+    if (!state.stavke.some((s) => s.primjer) && !state.kuponi.some((k) => k.primjer)) return "";
+    return `<div class="notice example">
+      <p><span class="badge example">Primjer</span> Proizvodi i kupon označeni kao primjer su tu da vidiš kako aplikacija radi. Cijene su stvarne, a kupon je izmišljen.</p>
+      <div class="row" style="flex-wrap:wrap"><button class="btn small" data-act="clear-examples">Obriši primjere</button><button class="btn small ghost" data-act="go" data-tab="popis">Dodaj svoje proizvode</button></div>
+    </div>`;
+  }
+
+  function priceTag(cents, big) { return `<span class="tag${big ? " big" : ""}">${esc(eur(cents))}</span>`; }
+
+  function offerBadges(o) {
+    let b = "";
+    if (o.kupon) b += `<span class="badge coupon">Kupon ${esc(couponLabel(o.kupon))}</span>`;
+    if (o.redovna) b += `<span class="badge sale">Akcija</span>`;
+    return b;
+  }
+
+  function planHtml() {
+    if (!state.stavke.length) {
+      return `<div class="card empty">
+        <h2>Popis je prazan</h2>
+        <p class="muted">Dodaj proizvode koje najčešće kupuješ. Ovdje ćeš onda vidjeti u kojoj trgovini je koji proizvod najjeftiniji.</p>
+        <button class="btn primary" data-act="go" data-tab="popis">Dodaj proizvode</button>
+      </div>`;
+    }
+    const sel = selectedChains();
+    if (!sel.length) {
+      return `<div class="card empty"><h2>Nije odabrana nijedna trgovina</h2><p class="muted">Označi trgovine u kojima kupuješ.</p><button class="btn primary" data-act="go" data-tab="trgovine">Odaberi trgovine</button></div>`;
+    }
+    const plan = computePlan();
+    const bestSingle = plan.single.find((s) => s.nema === 0);
+    const saving = bestSingle ? bestSingle.ukupno - plan.total : 0;
+    const couponSaving = plan.perItem.reduce((sum, r) => sum + (r.best && r.best.kupon ? r.best.bezKupona - r.best.ukupno : 0), 0);
+    const stops = [...plan.stops.entries()].map(([code, rows]) => ({ code, rows, sum: rows.reduce((s, r) => s + r.best.ukupno, 0) }))
+      .sort((a, b) => b.rows.length - a.rows.length || b.sum - a.sum);
+
+    let h = exampleNotice();
+    h += `<section class="card summary" aria-label="Ukupno">
+      <div class="total">
+        <div><div class="label">Najjeftinije ukupno</div><div class="muted small">${stops.length} ${plural(stops.length, "trgovina", "trgovine", "trgovina")}, ${state.stavke.length - plan.missing.length} ${plural(state.stavke.length - plan.missing.length, "proizvod", "proizvoda", "proizvoda")}</div></div>
+        ${priceTag(plan.total, true)}
+      </div>
+      ${saving > 0 ? `<div class="savebar">Uštediš ${esc(eur(saving))} u odnosu na kupnju svega u trgovini ${esc(chainName(bestSingle.lanac))}.</div>` : ""}
+      ${couponSaving > 0 ? `<p class="small" style="color:var(--coupon);font-weight:600">Od toga kuponi donose ${esc(eur(couponSaving))}.</p>` : ""}
+      ${plan.missing.length ? `<p class="small muted">Nema ni u jednoj tvojoj trgovini: ${plan.missing.map((m) => esc(m.naziv)).join(", ")}.</p>` : ""}
+    </section>`;
+
+    h += `<section class="section" aria-label="Plan kupnje"><h2>Što kupiti gdje</h2>`;
+    for (const s of stops) {
+      h += `<article class="card stop">
+        <div class="stop-head"><span class="stop-name grow">${esc(chainName(s.code))}</span><span class="tag plain">${esc(eur(s.sum))}</span></div>
+        <ul class="lines">${s.rows.map((r) => lineHtml(r)).join("")}</ul>
+      </article>`;
+    }
+    h += `</section>`;
+
+    const max = Math.max(...plan.single.map((s) => s.ukupno), 1);
+    h += `<section class="section" aria-label="Sve u jednoj trgovini"><h2>Sve u jednoj trgovini</h2>
+      <p class="muted small">Ako ne želiš ići u više trgovina. Kuponi su uračunati.</p>
+      <ul class="card compare">${plan.single.map((s, i) => `<li class="${i === 0 && s.nema === 0 ? "best" : ""}">
+        <div><strong>${esc(chainName(s.lanac))}</strong>${!s.ima ? ` <span class="small muted">· nema ništa s popisa</span>` : s.nema ? ` <span class="small muted">· nema ${s.nema} ${plural(s.nema, "proizvod", "proizvoda", "proizvoda")}</span>` : ""}</div>
+        <div class="num" style="font-weight:600">${s.ima ? esc(eur(s.ukupno)) : "–"}</div>
+        ${s.ima ? `<div class="bar"><i style="width:${Math.max(4, Math.round((s.ukupno / max) * 100))}%"></i></div>` : ""}
+      </li>`).join("")}</ul>
+    </section>`;
+    return h;
+  }
+
+  function lineHtml(r) {
+    const o = r.best, item = r.item;
+    const unitNote = item.kom > 1 ? `${item.kom} × ${eur(o.cijena)}` : "";
+    const showName = item.kodovi.length > 1 || fold(o.naziv) !== fold(item.naziv);
+    return `<li class="line">
+      <div class="grow wraptext"><strong>${esc(item.naziv)}</strong>${item.primjer ? ` <span class="badge example">Primjer</span>` : ""}</div>
+      <div class="price">${priceTag(o.ukupno)}</div>
+      <div class="meta">
+        ${offerBadges(o)}
+        ${o.redovna ? `<span class="old">${esc(eur(o.redovna))}</span>` : ""}
+        ${unitNote ? `<span class="small muted">${esc(unitNote)}</span>` : ""}
+        ${showName ? `<span class="small muted wraptext">${esc(o.naziv)}</span>` : ""}
+      </div>
+    </li>`;
+  }
+
+  function popisHtml() {
+    let h = "";
+    const target = addingAltFor ? state.stavke.find((s) => s.id === addingAltFor) : null;
+    h += `<section class="section" aria-label="Dodaj proizvod">
+      <h2>${target ? `Dodaj zamjenu za: ${esc(target.naziv)}` : "Dodaj proizvod"}</h2>
+      ${target ? `<p class="small muted">Odaberi drugu marku ili pakiranje koje ti jednako odgovara. Aplikacija će u svakoj trgovini uzeti najjeftiniji od njih. <button class="linkbtn" data-act="cancel-alt">Odustani</button></p>` : `<p class="small muted">Upiši naziv, marku ili količinu, npr. „mlijeko 2,8 1 l”, „jaja”, „ariel color”.</p>`}
+      <div class="search">
+        <input id="q" type="search" inputmode="search" autocomplete="off" aria-label="Traži proizvod" placeholder="Traži među ${katalog.proizvodi.length.toLocaleString("hr-HR")} proizvoda…" value="${esc(searchText)}"></div>
+      <div id="results">${searchText.trim().length >= 2 ? resultsHtml() : ""}</div>
+    </section>`;
+
+    h += `<section class="section" aria-label="Moj popis"><div class="row"><h2 class="grow">Moj popis</h2><span class="small muted">${state.stavke.length} ${plural(state.stavke.length, "stavka", "stavke", "stavki")}</span></div>`;
+    if (!state.stavke.length) {
+      h += `<div class="card empty"><p class="muted">Još nema proizvoda. Potraži prvi proizvod iznad, npr. mlijeko.</p></div>`;
+    } else {
+      h += exampleNotice();
+      currentPlan = computePlan();
+      h += `<div class="card">${state.stavke.map(itemHtml).join("")}</div>`;
+      currentPlan = null;
+    }
+    h += `<div id="savestate-slot"></div></section>`;
+    return h;
+  }
+
+  function resultsHtml() {
+    const rows = search(searchText);
+    if (!rows.length) return `<div class="card empty"><p class="muted">Ništa nije pronađeno. Pokušaj s kraćim nazivom, npr. samo „mlijeko”.</p></div>`;
+    return `<ul class="card results">${rows.map((r) => {
+      const best = cheapestSelected(r);
+      const count = r[2].filter((p) => p != null).length;
+      return `<li class="result${best ? "" : " unavailable"}">
+        <div class="grow wraptext">${esc(r[1])}</div>
+        <button class="btn small primary" data-act="add" data-code="${esc(r[0])}" aria-label="Dodaj ${esc(r[1])}">Dodaj</button>
+        <div class="meta">
+          ${best ? `<span class="small">od <strong class="num">${esc(eur(best.cijena))}</strong> u trgovini ${esc(chainName(best.lanac))}</span>${best.redovna ? ` <span class="badge sale">Akcija</span>` : ""}` : `<span class="small muted">Nema u tvojim trgovinama</span>`}
+          <span class="small muted">· ${count} ${plural(count, "lanac", "lanca", "lanaca")}</span>
+        </div>
+      </li>`;
+    }).join("")}</ul>`;
+  }
+
+  function itemHtml(item) {
+    const sel = selectedChains();
+    const planned = currentPlan && currentPlan.perItem.find((r) => r.item === item);
+    const offers = planned ? planned.offers : sel.map((c) => offerAt(item, c)).filter(Boolean).sort((a, b) => a.ukupno - b.ukupno);
+    const best = offers[0];
+    const open = openItem === item.id;
+    let h = `<div class="item">
+      <div class="item-top">
+        <div class="grow">
+          <div class="item-name">${esc(item.naziv)}${item.primjer ? ` <span class="badge example">Primjer</span>` : ""}</div>
+          <div class="small muted">${best ? `Najjeftinije: <strong>${esc(chainName(best.lanac))}</strong>, ${esc(eur(best.ukupno))}${item.kom > 1 ? " ukupno" : ""}` : "Nema u tvojim trgovinama"}
+          ${best ? offerBadges(best) : ""}</div>
+        </div>
+        <div class="qty" role="group" aria-label="Količina">
+          <button data-act="qty" data-id="${item.id}" data-d="-1" aria-label="Manje">−</button>
+          <span class="num">${item.kom}</span>
+          <button data-act="qty" data-id="${item.id}" data-d="1" aria-label="Više">+</button>
+        </div>
+      </div>
+      <div class="row"><button class="linkbtn" data-act="toggle" data-id="${item.id}" aria-expanded="${open}">${open ? "Sakrij cijene" : `Cijene u ${offers.length} ${plural(offers.length, "trgovini", "trgovine", "trgovina")}`}</button></div>`;
+    if (open) {
+      h += `<ul class="prices">${offers.map((o, i) => `<li class="${i === 0 ? "cheapest" : ""}">
+          <span class="store">${esc(chainName(o.lanac))}</span>
+          <span class="what">${esc(o.naziv)} ${offerBadges(o)}</span>
+          <span class="amt"><span class="num" style="font-weight:600">${esc(eur(o.ukupno))}</span>${o.redovna ? `<span class="old">${esc(eur(o.redovna * item.kom))}</span>` : o.kupon ? `<span class="old">${esc(eur(o.bezKupona))}</span>` : ""}</span>
+        </li>`).join("")}</ul>`;
+      const missing = sel.filter((c) => !offers.some((o) => o.lanac === c));
+      if (missing.length) h += `<p class="small muted">Nema u: ${missing.map(chainName).join(", ")}</p>`;
+      h += `<div class="alts"><div class="small" style="font-weight:600">Proizvodi u ovoj stavci</div>${item.kodovi.map((k) => {
+        const row = byCode.get(k);
+        return `<div class="alt"><span class="grow">${esc(row ? row[1] : "Proizvod više nije na cjenicima")}</span>${item.kodovi.length > 1 ? `<button class="btn small ghost" data-act="rm-alt" data-id="${item.id}" data-code="${esc(k)}" aria-label="Makni ${esc(row ? row[1] : k)}">Makni</button>` : ""}</div>`;
+      }).join("")}</div>
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn small" data-act="alt" data-id="${item.id}">Dodaj zamjensku marku</button>
+        <button class="btn small" data-act="rename" data-id="${item.id}">Preimenuj</button>
+        <button class="btn small danger" data-act="del" data-id="${item.id}">Obriši</button>
+      </div>
+      ${renaming === item.id ? `<form class="row" data-form="rename" data-id="${item.id}"><input id="rename-${item.id}" class="grow" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface)" value="${esc(item.naziv)}" aria-label="Novi naziv"><button class="btn small primary">Spremi</button></form>` : ""}`;
+    }
+    h += `</div>`;
+    return h;
+  }
+  let renaming = null;
+  let currentPlan = null;
+
+  function kuponiHtml() {
+    const itemsOpts = state.stavke.map((s) => `<option value="${s.id}">${esc(s.naziv)}</option>`).join("");
+    const chainOpts = chains().filter((c) => c.poslovnica > 0).map((c) => `<option value="${c.kod}">${esc(c.naziv)}</option>`).join("");
+    let h = `<section class="section"><h2>Kuponi iz tvojih aplikacija</h2>
+      <p class="muted small">Kuponi iz aplikacija (Lidl Plus, Kaufland Card, Moj Konzum…) nisu javni, pa ih ovdje dodaješ sam. Aplikacija ih onda uračuna u usporedbu, dok ne isteknu.</p>`;
+    if (sampleImages) {
+      h += `<div class="card form">
+        <h3>Učitaj snimku zaslona kupona</h3>
+        <p class="small muted">Otvori kupone u aplikaciji trgovine, napravi snimku zaslona i odaberi je ovdje. Claude pročita kupone i predloži ih, a ti potvrdiš.</p>
+        <div class="field"><label for="shot-chain">Trgovina na snimci</label><select id="shot-chain">${chainOpts}</select></div>
+        <div class="field"><label for="shot">Snimka zaslona</label><input id="shot" type="file" accept="image/*"></div>
+        ${readingCoupon ? `<div class="row"><span class="status">Čitam kupone… ovo traje do pola minute.</span><button class="btn small" data-act="stop-read">Zaustavi</button></div>` : ""}
+      </div>`;
+    }
+    if (couponDraft) h += draftHtml();
+    h += `<form class="card form" data-form="coupon">
+        <h3>Dodaj kupon ručno</h3>
+        ${state.stavke.length ? "" : `<p class="small muted">Prvo dodaj proizvode na popis.</p>`}
+        <div class="two">
+          <div class="field"><label for="k-lanac">Trgovina</label><select id="k-lanac" required>${chainOpts}</select></div>
+          <div class="field"><label for="k-stavka">Proizvod s popisa</label><select id="k-stavka" required>${itemsOpts}</select></div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="k-vrsta">Vrsta kupona</label><select id="k-vrsta">
+            <option value="posto">Popust u postotku</option>
+            <option value="cijena">Posebna cijena</option>
+            <option value="xy">Kupi X, plati Y</option>
+          </select></div>
+          <div class="field" id="k-val-wrap"><label for="k-val">Popust (%)</label><input id="k-val" type="number" inputmode="decimal" min="1" max="100" step="1" value="50" required></div>
+        </div>
+        <div class="two" id="k-xy" hidden>
+          <div class="field"><label for="k-x">Kupi (komada)</label><input id="k-x" type="number" min="2" step="1" value="2"></div>
+          <div class="field"><label for="k-y">Plati (komada)</label><input id="k-y" type="number" min="1" step="1" value="1"></div>
+        </div>
+        <div class="field"><label for="k-do">Vrijedi do</label><input id="k-do" type="date" value="${nextSunday()}"></div>
+        <div><button class="btn primary" ${state.stavke.length ? "" : "disabled"}>Dodaj kupon</button></div>
+      </form>`;
+    const list = state.kuponi.slice().sort((a, b) => (couponActive(b) - couponActive(a)) || String(a.vrijediDo).localeCompare(String(b.vrijediDo)));
+    if (list.length) {
+      h += `<h3>Tvoji kuponi</h3><div class="section">${list.map((k) => {
+        const item = state.stavke.find((s) => s.id === k.stavka);
+        const active = couponActive(k);
+        return `<div class="coupon${active ? "" : " is-expired"}">
+          <div class="row"><span class="coupon-value grow">${esc(couponLabel(k))}</span>${k.primjer ? `<span class="badge example">Primjer</span>` : ""}${active ? "" : `<span class="badge expired">Istekao</span>`}</div>
+          <div><strong>${esc(chainName(k.lanac))}</strong> · ${esc(item ? item.naziv : "proizvod obrisan s popisa")}</div>
+          ${k.opis ? `<div class="small muted">${esc(k.opis)}</div>` : ""}
+          <div class="row"><span class="small muted grow">${k.vrijediDo ? `Vrijedi do ${esc(fmtDate(k.vrijediDo))}` : "Bez datuma isteka"}</span><button class="btn small ghost danger" data-act="del-coupon" data-id="${k.id}">Obriši</button></div>
+        </div>`;
+      }).join("")}</div>`;
+    }
+    h += `<div id="savestate-slot"></div></section>`;
+    return h;
+  }
+
+  function draftHtml() {
+    const d = couponDraft;
+    if (!d.length) return `<div class="notice"><p>Na snimci nisam našao kupone. Probaj snimku na kojoj se vide naziv proizvoda i popust.</p><div><button class="btn small" data-act="draft-cancel">U redu</button></div></div>`;
+    const itemsOpts = (sel) => `<option value="">Nije na popisu</option>` + state.stavke.map((s) => `<option value="${s.id}" ${s.id === sel ? "selected" : ""}>${esc(s.naziv)}</option>`).join("");
+    return `<div class="card form"><h3>Pronađeni kuponi</h3>
+      <p class="small muted">Provjeri jesu li dobro pročitani. Kupon se računa samo kad je povezan s proizvodom s popisa.</p>
+      ${d.map((k, i) => `<div class="coupon">
+        <label class="row"><input type="checkbox" data-draft-on="${i}" ${k.on ? "checked" : ""}> <span class="coupon-value">${esc(couponLabel(k))}</span></label>
+        <div class="small">${esc(chainName(k.lanac))} · ${esc(k.opis || "")}${k.vrijediDo ? ` · do ${esc(fmtDate(k.vrijediDo))}` : ""}</div>
+        <div class="field"><label for="draft-item-${i}">Proizvod s popisa</label><select id="draft-item-${i}" data-draft-item="${i}">${itemsOpts(k.stavka)}</select></div>
+      </div>`).join("")}
+      <div class="row" style="flex-wrap:wrap"><button class="btn primary" data-act="draft-save">Spremi označene kupone</button><button class="btn" data-act="draft-cancel">Odustani</button></div>
+    </div>`;
+  }
+
+  function nextSunday() {
+    const d = new Date(); d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || 7));
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  }
+
+  function trgovineHtml() {
+    const sel = selectedChains();
+    const cityOpts = (katalog.gradovi || []).map(([g, n]) => `<option value="${esc(g)}" ${g === state.grad ? "selected" : ""}>${esc(g)} (${n} ${plural(n, "trgovina", "trgovine", "trgovina")})</option>`).join("");
+    return `<section class="section"><h2>Moje trgovine</h2>
+      <p class="muted small">Označi trgovine u kojima kupuješ ili čije aplikacije imaš. Usporedba gleda samo njih.</p>
+      <ul class="card stores">${chains().map((c) => `<li><label>
+        <input type="checkbox" data-chain="${c.kod}" ${sel.includes(c.kod) ? "checked" : ""} ${c.poslovnica ? "" : "disabled"}>
+        <span class="grow"><strong>${esc(c.naziv)}</strong><br><span class="small muted">${c.poslovnica ? `${c.poslovnica} ${plural(c.poslovnica, "poslovnica", "poslovnice", "poslovnica")} · ${(c.proizvoda || 0).toLocaleString("hr-HR")} proizvoda` : "Nema cjenika"}${c.cijelaHrvatska ? `<br>U gradu ${esc(katalog.grad)} nema poslovnica u cjenicima, pa su prikazane najčešće cijene u Hrvatskoj.` : ""}</span></span>
+      </label></li>`).join("")}</ul>
+      <h2>Moj grad</h2>
+      <p class="muted small">Cijene se razlikuju od poslovnice do poslovnice. Trenutno je prikazana najčešća cijena svakog lanca za ${katalog.grad ? `grad ${esc(katalog.grad)}` : "cijelu Hrvatsku"}. Kad odabereš grad, cijene za njega stižu sa sljedećim dnevnim osvježavanjem.</p>
+      <div class="field"><label for="grad">Grad</label><select id="grad"><option value="">Cijela Hrvatska</option>${cityOpts}</select></div>
+      ${state.grad && state.grad !== katalog.grad ? `<p class="small" style="font-weight:600">Cijene za grad ${esc(state.grad)} stižu sa sljedećim osvježavanjem.</p>` : ""}
+      <details class="card help"><summary>Odakle su cijene?</summary>
+        <ul class="small">
+          <li>Od svibnja 2025. trgovci u Hrvatskoj moraju svaki dan objaviti cjenike svih poslovnica (Odluka, NN 75/2025). Podatke skuplja javni servis cijene.dev.</li>
+          <li>Aplikacija koristi cjenike od ${esc(fmtDate(katalog.datum))}. Cijene se osvježavaju jednom dnevno.</li>
+          <li>Akcijske cijene iz cjenika su uračunate. Kuponi iz aplikacija trgovina nisu javni, pa ih dodaješ u kartici Kuponi.</li>
+          <li>Cijena lanca je najčešća cijena među njegovim poslovnicama, pa se u pojedinoj poslovnici može malo razlikovati.</li>
+        </ul>
+      </details>
+      <div id="savestate-slot"></div>
+    </section>`;
+  }
+
+  // ---------- Radnje ----------
+  function addItem(code) {
+    const row = byCode.get(code);
+    if (!row) return;
+    if (addingAltFor) {
+      const item = state.stavke.find((s) => s.id === addingAltFor);
+      if (item && !item.kodovi.includes(code)) item.kodovi.push(code);
+      addingAltFor = null; searchText = "";
+      openItem = item ? item.id : null;
+      commit("Zamjena je dodana.");
+      return;
+    }
+    const existing = state.stavke.find((s) => s.kodovi.includes(code));
+    if (existing) { existing.kom += 1; commit(`Već je na popisu, sad ${existing.kom} kom.`); return; }
+    state.stavke.push({ id: uid(), naziv: row[1], kom: 1, kodovi: [code] });
+    commit("Dodano na popis.");
+  }
+
+  async function readScreenshot(file) {
+    if (!sample || !file) return;
+    const code = $("#shot-chain").value;
+    readingCoupon = new AbortController();
+    couponDraft = null;
+    render();
+    const items = state.stavke.map((s) => ({ id: s.id, naziv: s.naziv }));
+    const prompt = `Na slici je snimka zaslona aplikacije trgovine ${chainName(code)} (Hrvatska) s kuponima ili posebnim ponudama.
+Pročitaj svaki kupon i vrati SAMO JSON polje objekata ovog oblika:
+[{"opis": "kratki opis s nazivom proizvoda kako piše na kuponu", "vrsta": "posto" | "cijena" | "xy", "vrijednost": broj, "x": broj, "y": broj, "vrijediDo": "GGGG-MM-DD" ili null, "stavka": "id s popisa" ili null}]
+Pravila:
+- "posto": popust u postotku, vrijednost je postotak (npr. 50 za -50%).
+- "cijena": posebna cijena po komadu u eurima, vrijednost je cijena (npr. 0.99).
+- "xy": "kupi X plati Y" ili "X+1 gratis": x je koliko komada uzmeš, y koliko platiš (2+1 gratis je x=3, y=2). vrijednost stavi 0.
+- vrijediDo: datum isteka ako piše na kuponu, inače null. Današnji datum je ${todayIso()}.
+- stavka: id proizvoda s korisnikova popisa na koji se kupon odnosi, samo ako je očito isti proizvod ili ista vrsta proizvoda. Inače null.
+Korisnikov popis: ${JSON.stringify(items)}
+Ako na slici nema kupona, vrati [].`;
+    try {
+      const out = await sample.json(prompt, { images: [file], signal: readingCoupon.signal });
+      const list = Array.isArray(out) ? out : [];
+      couponDraft = list.map((k) => ({
+        id: uid(), lanac: code, opis: String(k.opis || "").slice(0, 140),
+        vrsta: ["posto", "cijena", "xy"].includes(k.vrsta) ? k.vrsta : "posto",
+        vrijednost: Number(k.vrijednost) || 0, x: Number(k.x) || 0, y: Number(k.y) || 0,
+        vrijediDo: /^\d{4}-\d{2}-\d{2}$/.test(k.vrijediDo || "") ? k.vrijediDo : "",
+        stavka: state.stavke.some((s) => s.id === k.stavka) ? k.stavka : "",
+      })).filter((k) => (k.vrsta === "xy" ? k.x > k.y && k.y >= 0 : k.vrijednost > 0)).map((k) => ({ ...k, on: !!k.stavka }));
+    } catch (e) {
+      const msg = {
+        cancelled: "", not_granted: "Čitanje snimke nije dopušteno. Kupon možeš dodati ručno.",
+        rate_limited: "Previše zahtjeva u kratkom vremenu. Pokušaj za minutu.",
+        image_rejected: "Ova slika se ne može pročitati. Probaj PNG ili JPG snimku zaslona.",
+        invalid_json: "Kupone nisam uspio pročitati. Probaj jasniju snimku ili dodaj kupon ručno.",
+      }[e && e.code] ?? "Čitanje snimke nije uspjelo. Kupon možeš dodati ručno.";
+      if (msg) toast(msg);
+      couponDraft = null;
+    } finally {
+      readingCoupon = null;
+      render();
+    }
+  }
+
+  document.addEventListener("click", (ev) => {
+    const tabBtn = ev.target.closest("nav.tabs button");
+    if (tabBtn) { setTab(tabBtn.dataset.tab); return; }
+    const el = ev.target.closest("[data-act]");
+    if (!el) return;
+    const act = el.dataset.act, id = el.dataset.id;
+    const item = id ? state.stavke.find((s) => s.id === id) : null;
+    switch (act) {
+      case "go": setTab(el.dataset.tab); break;
+      case "add": addItem(el.dataset.code); break;
+      case "qty": if (item) { item.kom = Math.max(1, Math.min(99, item.kom + Number(el.dataset.d))); commit(); } break;
+      case "toggle": openItem = openItem === id ? null : id; renaming = null; render(); break;
+      case "alt": addingAltFor = id; searchText = ""; render(); window.scrollTo({ top: 0, behavior: "smooth" }); $("#q")?.focus(); break;
+      case "cancel-alt": addingAltFor = null; render(); break;
+      case "rm-alt": if (item && item.kodovi.length > 1) { item.kodovi = item.kodovi.filter((k) => k !== el.dataset.code); commit("Maknuto iz stavke."); } break;
+      case "rename": renaming = renaming === id ? null : id; render(); $(`#rename-${id}`)?.focus(); break;
+      case "del":
+        if (item) {
+          if (el.dataset.confirm !== "1") { el.dataset.confirm = "1"; el.textContent = "Sigurno obrisati?"; return; }
+          state.stavke = state.stavke.filter((s) => s.id !== id);
+          state.kuponi = state.kuponi.filter((k) => k.stavka !== id);
+          openItem = null; commit("Obrisano s popisa.");
+        }
+        break;
+      case "del-coupon": state.kuponi = state.kuponi.filter((k) => k.id !== id); commit("Kupon je obrisan."); break;
+      case "clear-examples":
+        state.kuponi = state.kuponi.filter((k) => !k.primjer && !state.stavke.some((s) => s.primjer && s.id === k.stavka));
+        state.stavke = state.stavke.filter((s) => !s.primjer);
+        commit("Primjeri su obrisani.");
+        break;
+      case "stop-read": readingCoupon?.abort(); break;
+      case "draft-cancel": couponDraft = null; render(); break;
+      case "draft-save": {
+        const chosen = (couponDraft || []).filter((k) => k.on && k.stavka);
+        for (const k of chosen) { const { on, ...rest } = k; state.kuponi.push(rest); }
+        couponDraft = null;
+        commit(chosen.length ? `Spremljeno kupona: ${chosen.length}.` : "Nijedan kupon nije spremljen, jer nije povezan s proizvodom.");
+        break;
+      }
+    }
+  });
+
+  document.addEventListener("input", (ev) => {
+    const t = ev.target;
+    if (t.id === "q") {
+      searchText = t.value;
+      clearTimeout(searchTimer);
+      // Osvježi samo rezultate, da tipkovnica na mobitelu ostane otvorena.
+      searchTimer = setTimeout(() => {
+        const box = $("#results");
+        if (box) box.innerHTML = searchText.trim().length >= 2 ? resultsHtml() : "";
+      }, 150);
+    }
+  });
+  let searchTimer = null;
+
+  document.addEventListener("change", (ev) => {
+    const t = ev.target;
+    if (t.dataset.chain) {
+      const sel = new Set(selectedChains());
+      t.checked ? sel.add(t.dataset.chain) : sel.delete(t.dataset.chain);
+      state.trgovine = chains().map((c) => c.kod).filter((c) => sel.has(c));
+      commit(t.checked ? `${chainName(t.dataset.chain)} je uključen.` : `${chainName(t.dataset.chain)} je isključen.`);
+    } else if (t.id === "grad") {
+      state.grad = t.value;
+      commit(t.value ? `Grad je postavljen: ${t.value}.` : "Prikazuje se cijela Hrvatska.");
+    } else if (t.id === "k-vrsta") {
+      const v = t.value;
+      $("#k-xy").hidden = v !== "xy";
+      $("#k-val-wrap").hidden = v === "xy";
+      const lab = $("#k-val-wrap label"), inp = $("#k-val");
+      if (v === "posto") { lab.textContent = "Popust (%)"; inp.min = 1; inp.max = 100; inp.step = 1; inp.value = 50; }
+      if (v === "cijena") { lab.textContent = "Cijena s kuponom (€)"; inp.min = 0.01; inp.removeAttribute("max"); inp.step = 0.01; inp.value = "0.99"; }
+      inp.required = v !== "xy";
+    } else if (t.id === "shot" && t.files && t.files[0]) {
+      readScreenshot(t.files[0]);
+    } else if (t.dataset.draftOn != null) {
+      couponDraft[+t.dataset.draftOn].on = t.checked;
+    } else if (t.dataset.draftItem != null) {
+      const k = couponDraft[+t.dataset.draftItem];
+      k.stavka = t.value; k.on = !!t.value;
+      render();
+    }
+  });
+
+  document.addEventListener("submit", (ev) => {
+    const f = ev.target;
+    ev.preventDefault();
+    if (f.dataset.form === "coupon") {
+      const vrsta = $("#k-vrsta").value;
+      const k = { id: uid(), lanac: $("#k-lanac").value, stavka: $("#k-stavka").value, vrsta, vrijediDo: $("#k-do").value || "" };
+      if (vrsta === "xy") {
+        k.x = parseInt($("#k-x").value, 10); k.y = parseInt($("#k-y").value, 10); k.vrijednost = 0;
+        if (!(k.x >= 2 && k.y >= 1 && k.y < k.x)) { toast("Broj komada koje platiš mora biti manji od broja koje uzmeš."); return; }
+      } else {
+        k.vrijednost = parseFloat(String($("#k-val").value).replace(",", "."));
+        if (!(k.vrijednost > 0) || (vrsta === "posto" && k.vrijednost > 100)) { toast("Upiši ispravan iznos popusta."); return; }
+      }
+      state.kuponi.push(k);
+      commit("Kupon je dodan i uračunat.");
+    } else if (f.dataset.form === "rename") {
+      const item = state.stavke.find((s) => s.id === f.dataset.id);
+      const v = $(`#rename-${f.dataset.id}`).value.trim();
+      if (item && v) { item.naziv = v.slice(0, 80); renaming = null; commit("Naziv je promijenjen."); }
+    }
+  });
+
+  function setTab(t) {
+    tab = t; couponDraft = tab === "kuponi" ? couponDraft : null;
+    try { localStorage.setItem(TAB_KEY, t); } catch (e) {}
+    render();
+    window.scrollTo({ top: 0 });
+  }
+
+  // ---------- Pokretanje ----------
+  const local = loadLocal();
+  if (local) state = Object.assign(defaultState(), local);
+  try { const t = localStorage.getItem(TAB_KEY); if (t && ["plan", "popis", "kuponi", "trgovine"].includes(t)) tab = t; } catch (e) {}
+  render();
+  loadKatalog();
+  connectDb();
+  connectSample();
+})();
+</script>
