@@ -869,7 +869,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     return `<div class="card form"><h3>Pronađeni kuponi (${d.length})</h3>
       <p class="small muted">Provjeri je li svaki kupon dobro pročitan i povezan s pravim proizvodom iz cjenika. Kupon se uračuna kad taj proizvod staviš na popis.</p>
       ${d.map((k, i) => `<div class="coupon">
-        <label class="row"><input type="checkbox" data-draft-on="${i}" ${k.on ? "checked" : ""}> <span class="coupon-value">${esc(couponLabel(k))}</span> <span class="grow wraptext">${esc(k.naziv)}</span></label>
+        <label class="row"><input type="checkbox" data-draft-on="${i}" ${k.on ? "checked" : ""}> <span class="coupon-value">${esc(couponLabel(k))}</span> <span class="grow wraptext">${esc(k.naziv)}</span>${k.postoji ? `<span class="badge example">Već spremljen</span>` : ""}</label>
         <div class="small">${esc(chainName(k.lanac))}${k.vrijediDo ? ` · do ${esc(fmtDate(k.vrijediDo))}` : ""}${k.povrat ? " · povrat u BONUS eurima" : ""}${k.opis ? ` · ${esc(k.opis)}` : ""}</div>
         <div class="field"><label for="draft-prod-${i}">Proizvod u cjeniku</label><select id="draft-prod-${i}" data-draft-prod="${i}">
           ${k.kandidati.map((c) => { const r = byCode.get(c); const p = r && priceOf(r, idx); return `<option value="${esc(c)}" ${c === k.odabran ? "selected" : ""}>${esc(r ? r[1] : c)}${p ? ` · ${esc(eur(p.cijena))}` : ""}</option>`; }).join("")}
@@ -1004,6 +1004,8 @@ Ako na slikama nema kupona, vrati [].`;
         if (readingCoupon.done < readingCoupon.total) render();
       }
       const seen = new Set();
+      const couponKey = (lanac, naziv, vrsta, vrijednost, vrijediDo) => [lanac, fold(naziv || ""), vrsta, Number(vrijednost) || 0, vrijediDo || ""].join("|");
+      const saved = new Set(state.kuponi.map((k) => couponKey(k.lanac, k.naziv, k.vrsta, k.vrijednost, k.vrijediDo)));
       couponDraft = list.filter((k) => k && typeof k === "object").map((k) => {
         const naziv = String(k.naziv || "").slice(0, 100);
         const kandidati = findAtChain(`${k.trazi || ""} ${naziv}`, code, 6).map((r) => r[0]);
@@ -1011,7 +1013,7 @@ Ako na slikama nema kupona, vrati [].`;
           id: uid(), lanac: code, naziv, opis: String(k.napomena || "").slice(0, 100),
           vrsta: ["posto", "cijena", "xy", "gratis"].includes(k.vrsta) ? k.vrsta : "posto",
           vrijednost: Number(k.vrijednost) || 0, x: Number(k.x) || 0, y: Number(k.y) || 0,
-          vrijediDo: expiryDate(k.istjece), povrat: k.povrat === true, kandidati, odabran: kandidati[0] || "", on: true,
+          vrijediDo: expiryDate(k.istjece), povrat: k.povrat === true, kandidati, odabran: kandidati[0] || "", on: true, postoji: false,
         };
       }).filter((k) => k.vrsta === "gratis" || (k.vrsta === "xy" ? k.x > k.y && k.y >= 0 : k.vrijednost > 0 && (k.vrsta !== "posto" || k.vrijednost <= 100)))
         .filter((k) => {  // isti kupon s dva dijela koji se preklapaju
@@ -1019,6 +1021,10 @@ Ako na slikama nema kupona, vrati [].`;
           if (seen.has(key)) return false;
           seen.add(key);
           return true;
+        })
+        .map((k) => {  // kupon koji je već spremljen ne dodaj opet
+          const exists = saved.has(couponKey(k.lanac, k.naziv, k.vrsta, k.vrijednost, k.vrijediDo));
+          return { ...k, postoji: exists, on: !exists };
         });
     } catch (e) {
       const msg = {
