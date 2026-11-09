@@ -99,6 +99,16 @@ p { margin: 0; }
 .stores .cardrow label { padding: 0; gap: 10px; font-size: var(--step--1); }
 .stores .cardrow input[type="checkbox"] { width: 18px; height: 18px; }
 .badge.onlist { background: var(--save-soft); color: var(--save); }
+.badge.disc { background: var(--save-soft); color: var(--save); border: 1px solid var(--save); }
+.storebtn { background: none; border: 0; padding: 0; text-align: left; display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: baseline; min-width: 0; }
+.storebtn strong { text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.storelist { grid-column: 1 / -1; border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 2px; }
+.storelist .lines { padding: 0; }
+.bulk textarea { width: 100%; border: 2px solid var(--ink); border-radius: 10px; padding: 10px 12px; background: var(--surface); font-size: 1.0625rem; resize: vertical; min-height: 84px; }
+.discounts { display: grid; gap: 6px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.discounts label { align-items: flex-start; }
+.discounts input { width: 20px; height: 20px; accent-color: var(--save); flex: none; margin-top: 1px; }
+.onestore { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .badge.expired { background: transparent; color: var(--muted); border: 1px solid var(--line); text-decoration: line-through; }
 
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
@@ -281,12 +291,13 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   let sample = null, sampleImages = false, sampleMaxImages = 1, readingCoupon = null;
 
   function defaultState() {
-    return { verzija: 1, trgovine: null, grad: "", stavke: [], kuponi: [] };
+    return { verzija: 1, trgovine: null, grad: "", stavke: [], kuponi: [], popusti: [] };
   }
 
   // ---------- Pomoćne funkcije ----------
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const normText = (s) => fold(s).replace(/(\d),(\d)/g, "$1.$2");  // "2,8" i "2.8" su isto
   const fold = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d");
   const eur = (cents) => (cents / 100).toLocaleString("hr-HR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
   const uid = () => Math.random().toString(36).slice(2, 10);
@@ -342,7 +353,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     return state.kuponi.filter((k) => k.lanac === code && couponActive(k) && ((item && k.stavka === item.id) || (k.kodovi || []).includes(kod)));
   }
   function couponOnList(k) {
-    return state.stavke.some((s) => s.id === k.stavka || (k.kodovi || []).some((c) => s.kodovi.includes(c)));
+    return state.stavke.some((s) => s.id === k.stavka || (k.kodovi || []).some((c) => (s.kodovi || []).includes(c)));
   }
   // Ukupno za količinu, s kuponom ako postoji.
   function totalWithCoupon(unit, qty, k) {
@@ -357,43 +368,146 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     return unit * qty;
   }
 
-  // Najbolja ponuda stavke u jednom lancu: uzima najjeftiniji proizvod iz stavke i primijeni kupon.
-  function offerAt(item, code) {
+  // ---------- Opće stavke ("posni sir", bilo koja marka) ----------
+  // Količina iz naziva: "400 g", "1,5 l", "6x1L", "16/1" (role), "10 kom" -> {v, dim} u g, ml ili kom.
+  function parseQty(name) {
+    const t = fold(name).replace(/(\d),(\d)/g, "$1.$2");
+    let m = t.match(/(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|dl|cl|l)\b/);
+    let n = 1, v, u;
+    if (m) { n = +m[1]; v = +m[2]; u = m[3]; }
+    else if ((m = t.match(/(\d+(?:\.\d+)?)\s*(kg|g|ml|dl|cl|l)\b/))) { v = +m[1]; u = m[2]; }
+    else if ((m = t.match(/(\d+)\s*\/\s*1\b/)) || (m = t.match(/(\d+)\s*(?:kom|rola|role)\b/))) return +m[1] > 0 ? { v: +m[1], dim: "kom" } : null;
+    else return null;
+    const f = { kg: [1000, "g"], g: [1, "g"], l: [1000, "ml"], dl: [100, "ml"], cl: [10, "ml"], ml: [1, "ml"] }[u];
+    return v > 0 ? { v: n * v * f[0], dim: f[1] } : null;
+  }
+  function qtyText(q) {
+    if (!q) return "";
+    if (q.dim === "kom") return `${q.v} kom`;
+    const big = q.v >= 1000;
+    const n = big ? q.v / 1000 : q.v;
+    return `${String(Math.round(n * 100) / 100).replace(".", ",")} ${q.dim === "g" ? (big ? "kg" : "g") : (big ? "l" : "ml")}`;
+  }
+  // Riječi upita bez količine; kratke riječi ("sir") moraju biti cijele, duže se traže po korijenu.
+  function queryWords(q) {
+    return normText(q)
+      .replace(/\d+(?:\.\d+)?\s*(?:kg|g|ml|dl|cl|l)\b|\d+\s*\/\s*1\b|\d+\s*kom\b/g, " ")
+      .split(/[^a-z0-9.]+/).map((w) => w.replace(/^\.+|\.+$/g, "")).filter((w) => w.length >= 2 || /^\d$/.test(w));
+  }
+  function wordMatcher(w) {
+    if (w.length <= 3 || /\d/.test(w)) {  // kratke riječi i brojevi ("sir", "2.8") moraju biti cijeli
+      const re = new RegExp(`(^|[^a-z0-9.])${w.replace(/\./g, "\\.")}($|[^a-z0-9])`);
+      return (name) => re.test(name);
+    }
+    const stem = w.slice(0, Math.max(4, w.length - 2));
+    return (name) => name.includes(stem);
+  }
+  const genericCache = new Map();
+  function genericMatches(item) {
+    if (genericCache.has(item.upit)) return genericCache.get(item.upit);
+    ensureFolded();
+    const tests = queryWords(item.upit).map(wordMatcher);
+    const idx = [];
+    if (tests.length) for (let i = 0; i < folded.length && idx.length < 800; i++) if (tests.every((t) => t(folded[i]))) idx.push(i);
+    const qByCode = new Map(idx.map((i) => [katalog.proizvodi[i][0], parseQty(katalog.proizvodi[i][1])]));
+    const res = { idx, qty: parseQty(item.upit), qByCode };
+    genericCache.set(item.upit, res);
+    return res;
+  }
+  // Pakiranje s kojim se uspoređuje: količina iz upita, inače najčešće pakiranje u odabranim trgovinama.
+  function genericRef(item, g, selIdx) {
+    if (g.qty) return { ...g.qty, tol: 0.05 };
+    const dims = new Map(), counts = new Map();
+    for (const i of g.idx) {
+      const row = katalog.proizvodi[i];
+      if ((item.iskljuceni || []).includes(row[0]) || !selIdx.some((ci) => row[2][ci] != null)) continue;
+      const q = g.qByCode.get(row[0]);
+      if (!q) continue;
+      dims.set(q.dim, (dims.get(q.dim) || 0) + 1);
+      const k = `${q.dim}:${Number(q.v.toPrecision(2))}`;
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    if (!dims.size) return null;
+    const dim = [...dims.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    const top = [...counts.entries()].filter(([k]) => k.startsWith(dim + ":"))
+      .sort((a, b) => b[1] - a[1] || parseFloat(a[0].split(":")[1]) - parseFloat(b[0].split(":")[1]))[0];
+    return { v: parseFloat(top[0].split(":")[1]), dim, tol: null };
+  }
+  function fitsRef(q, ref) {
+    if (!ref) return true;
+    if (!q || q.dim !== ref.dim) return false;
+    return ref.tol != null ? Math.abs(q.v - ref.v) <= ref.v * ref.tol : q.v >= ref.v * 0.75 && q.v <= ref.v * 1.35;
+  }
+  function billDiscounts(code) { return (state.popusti || []).filter((d) => d.ukljucen && d.lanac === code); }
+
+  // Najbolja ponuda stavke u jednom lancu: najjeftiniji proizvod iz stavke (ili iz pretrage za opću
+  // stavku), s kuponom, cijenom uz karticu i popustom na račun.
+  function offerAt(item, code, ctx) {
     const idx = chainIndex(code);
     if (idx < 0) return null;
-    let best = null;
-    for (const kod of item.kodovi) {
+    let codes = item.kodovi || [], g = null, ref = null;
+    if (item.upit) {
+      g = genericMatches(item);
+      ref = ctx && ctx.refs ? ctx.refs.get(item.id) : genericRef(item, g, selectedChains().map(chainIndex));
+      const skip = new Set(item.iskljuceni || []);
+      codes = g.idx.map((i) => katalog.proizvodi[i][0]).filter((c) => !skip.has(c));
+    }
+    const discounts = billDiscounts(code);
+    let best = null, fallback = null;
+    for (const kod of codes) {
       const row = byCode.get(kod);
       if (!row) continue;
       const p = priceOf(row, idx);
       if (!p) continue;
-      const options = [null, ...couponsFor(code, kod, item)];
-      for (const k of options) {
-        const total = totalWithCoupon(p.cijena, item.kom, k);
-        if (!best || total < best.ukupno) {
-          best = { lanac: code, kod, naziv: row[1], cijena: p.cijena, redovna: p.redovna, kartica: p.kartica, ukupno: total, kupon: k, bezKupona: p.cijena * item.kom,
-                   povrat: k && k.povrat ? p.cijena * item.kom - total : 0 };
+      const q = g ? g.qByCode.get(kod) : null;
+      const fits = !g || fitsRef(q, ref);
+      const perUnit = q ? Math.round(p.cijena / q.v * (q.dim === "kom" ? 1 : 1000)) : null;
+      for (const k of [null, ...couponsFor(code, kod, item)]) {
+        const withCoupon = totalWithCoupon(p.cijena, item.kom, k);
+        let total = withCoupon, popust = null;
+        for (const d of discounts) {
+          if (d.samoRedovne && (k || p.redovna || p.kartica)) continue;  // samo proizvodi koji nisu na sniženju
+          const t = Math.round(withCoupon * (100 - d.posto) / 100);
+          if (t < total) { total = t; popust = d; }
+        }
+        const offer = { lanac: code, kod, naziv: row[1], cijena: p.cijena, redovna: p.redovna, kartica: p.kartica, ukupno: total, kupon: k,
+          bezKupona: p.cijena * item.kom, povrat: k && k.povrat ? p.cijena * item.kom - withCoupon : 0, popust,
+          jedinicna: perUnit, jedinica: q ? (q.dim === "g" ? "kg" : q.dim === "ml" ? "l" : "kom") : "" };
+        if (fits) {
+          if (!best || total < best.ukupno) best = offer;
+        } else if (q && ref && q.dim === ref.dim) {
+          // Nema sličnog pakiranja: uzmi najbliže po veličini (16 rola, a ne 80 vlažnih maramica).
+          const dist = Math.abs(Math.log(q.v / ref.v));
+          if (!fallback || dist < fallback.dist - 1e-9 || (Math.abs(dist - fallback.dist) < 1e-9 && total < fallback.ukupno)) {
+            fallback = { ...offer, drugoPakiranje: true, dist };
+          }
         }
       }
     }
-    return best;
+    return best || fallback;
   }
+
+  const byOffer = (a, b) => ((a.drugoPakiranje ? 1 : 0) - (b.drugoPakiranje ? 1 : 0)) || (a.ukupno - b.ukupno);
 
   function computePlan() {
     const sel = selectedChains();
+    const selIdx = sel.map(chainIndex);
+    const refs = new Map();
+    for (const item of state.stavke) if (item.upit) refs.set(item.id, genericRef(item, genericMatches(item), selIdx));
+    const ctx = { refs };
     const perItem = state.stavke.map((item) => {
-      const offers = sel.map((c) => offerAt(item, c)).filter(Boolean).sort((a, b) => a.ukupno - b.ukupno);
+      const offers = sel.map((c) => offerAt(item, c, ctx)).filter(Boolean).sort(byOffer);
       return { item, offers, best: offers[0] || null };
     });
     // Kad je ista najniža cijena u više trgovina, biraj trgovinu u kojoj se ionako kupuje više stvari.
     const score = new Map();
     for (const r of perItem) {
       if (!r.best) continue;
-      for (const o of r.offers) if (o.ukupno === r.best.ukupno) score.set(o.lanac, (score.get(o.lanac) || 0) + 1);
+      for (const o of r.offers) if (o.ukupno === r.best.ukupno && !o.drugoPakiranje) score.set(o.lanac, (score.get(o.lanac) || 0) + 1);
     }
     for (const r of perItem) {
       if (!r.best) continue;
-      const ties = r.offers.filter((o) => o.ukupno === r.best.ukupno);
+      const ties = r.offers.filter((o) => o.ukupno === r.best.ukupno && !!o.drugoPakiranje === !!r.best.drugoPakiranje);
       r.best = ties.reduce((a, b) => ((score.get(b.lanac) || 0) > (score.get(a.lanac) || 0) ? b : a), ties[0]);
       r.offers = [r.best, ...r.offers.filter((o) => o !== r.best)];
     }
@@ -413,7 +527,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
       }
       return { lanac: c, ukupno: sum, ima: have, nema: perItem.length - have };
     }).sort((a, b) => (a.nema - b.nema) || (a.ukupno - b.ukupno));
-    return { perItem, stops, total, missing, single };
+    return { perItem, stops, total, missing, single, refs };
   }
 
   // ---------- Spremanje ----------
@@ -533,11 +647,11 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     render();
   }
   function ensureFolded() {
-    if (!folded && katalog) folded = katalog.proizvodi.map((r) => fold(r[1]));
+    if (!folded && katalog) folded = katalog.proizvodi.map((r) => normText(r[1]));
   }
   function search(q) {
     ensureFolded();
-    const toks = fold(q).split(/\s+/).filter(Boolean);
+    const toks = normText(q).split(/\s+/).filter(Boolean);
     if (!toks.length || !folded) return [];
     const sel = selectedChains().map(chainIndex);
     const out = [];
@@ -629,15 +743,27 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     if (o.kupon) b += `<span class="badge coupon">Kupon ${esc(couponLabel(o.kupon))}${o.kupon.povrat ? " povrat" : ""}</span>`;
     if (o.kartica) b += `<span class="badge cardb">Uz ${esc(o.kartica)}</span>`;
     else if (o.redovna) b += `<span class="badge sale">Akcija</span>`;
+    if (o.popust) b += `<span class="badge disc">−${o.popust.posto}% ${esc(o.popust.naziv)}</span>`;
+    if (o.drugoPakiranje) b += `<span class="badge example">Drugo pakiranje</span>`;
     return b;
+  }
+  function unitNote(o) { return o && o.jedinicna ? `${eur(o.jedinicna)}/${o.jedinica}` : ""; }
+
+  function discountsHtml() {
+    const list = state.popusti || [];
+    if (!list.length) return `<p class="small muted">Imaš popust na cijeli račun u nekoj trgovini? <button class="linkbtn" data-act="go" data-tab="trgovine">Dodaj ga</button></p>`;
+    return `<div class="discounts">${list.map((d) => `<label class="row small" for="pop-${d.id}">
+      <input id="pop-${d.id}" type="checkbox" data-popust="${d.id}" ${d.ukljucen ? "checked" : ""}>
+      <span>Uračunaj <strong>−${d.posto}% ${esc(d.naziv)}</strong> u trgovini ${esc(chainName(d.lanac))}${d.samoRedovne ? ", samo na proizvode koji nisu na sniženju" : ""}${d.napomena ? ` (${esc(d.napomena)})` : ""}</span>
+    </label>`).join("")}</div>`;
   }
 
   function planHtml() {
     if (!state.stavke.length) {
       return `<div class="card empty">
         <h2>Popis je prazan</h2>
-        <p class="muted">Dodaj proizvode koje najčešće kupuješ. Ovdje ćeš onda vidjeti u kojoj trgovini je koji proizvod najjeftiniji.</p>
-        <button class="btn primary" data-act="go" data-tab="popis">Dodaj proizvode</button>
+        <p class="muted">Upiši što kupuješ, npr. „posni sir, toaletni papir, čajna kobasica”. Ovdje ćeš onda vidjeti gdje je što najjeftinije i u kojoj trgovini najbolje prolaziš.</p>
+        <button class="btn primary" data-act="go" data-tab="popis">Upiši popis</button>
       </div>`;
     }
     const sel = selectedChains();
@@ -645,7 +771,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
       return `<div class="card empty"><h2>Nije odabrana nijedna trgovina</h2><p class="muted">Označi trgovine u kojima kupuješ.</p><button class="btn primary" data-act="go" data-tab="trgovine">Odaberi trgovine</button></div>`;
     }
     const plan = computePlan();
+    const n = state.stavke.length;
     const bestSingle = plan.single.find((s) => s.nema === 0);
+    const mostItems = plan.single.slice().sort((a, b) => b.ima - a.ima || a.ukupno - b.ukupno)[0];
     const saving = bestSingle ? bestSingle.ukupno - plan.total : 0;
     const couponSaving = plan.perItem.reduce((sum, r) => sum + (r.best && r.best.kupon ? r.best.bezKupona - r.best.ukupno : 0), 0);
     const cashback = plan.perItem.reduce((sum, r) => sum + (r.best ? r.best.povrat || 0 : 0), 0);
@@ -655,13 +783,16 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     let h = exampleNotice();
     h += `<section class="card summary" aria-label="Ukupno">
       <div class="total">
-        <div><div class="label">Najjeftinije ukupno</div><div class="muted small">${stops.length} ${plural(stops.length, "trgovina", "trgovine", "trgovina")}, ${state.stavke.length - plan.missing.length} ${plural(state.stavke.length - plan.missing.length, "proizvod", "proizvoda", "proizvoda")}</div></div>
+        <div><div class="label">Najjeftinije ukupno</div><div class="muted small">${stops.length} ${plural(stops.length, "trgovina", "trgovine", "trgovina")}, ${n - plan.missing.length} ${plural(n - plan.missing.length, "proizvod", "proizvoda", "proizvoda")}</div></div>
         ${priceTag(plan.total, true)}
       </div>
-      ${saving > 0 ? `<div class="savebar">Uštediš ${esc(eur(saving))} u odnosu na kupnju svega u trgovini ${esc(chainName(bestSingle.lanac))}.</div>` : ""}
-      ${couponSaving > 0 ? `<p class="small" style="color:var(--coupon);font-weight:600">Od toga kuponi donose ${esc(eur(couponSaving))}. Prije kupnje ih aktiviraj u aplikaciji trgovine.</p>` : ""}
+      ${bestSingle ? `<div class="onestore"><span class="label">Sve na jednom mjestu</span> <span>najjeftinije u trgovini <strong>${esc(chainName(bestSingle.lanac))}</strong>: <strong class="num">${esc(eur(bestSingle.ukupno))}</strong></span> <button class="linkbtn" data-act="store-list" data-chain="${bestSingle.lanac}">Popis za ${esc(chainName(bestSingle.lanac))}</button></div>`
+        : mostItems && mostItems.ima ? `<p class="small">Nijedna trgovina nema sve s popisa. Najviše ima ${esc(chainName(mostItems.lanac))}: ${mostItems.ima} od ${n}.</p>` : ""}
+      ${saving > 0 ? `<div class="savebar">Ako ideš u više trgovina, uštediš još ${esc(eur(saving))}.</div>` : ""}
+      ${couponSaving > 0 ? `<p class="small" style="color:var(--coupon);font-weight:600">Kuponi donose ${esc(eur(couponSaving))}. Prije kupnje ih aktiviraj u aplikaciji trgovine.</p>` : ""}
       ${cashback > 0 ? `<p class="small">Na blagajni platiš ${esc(eur(plan.total + cashback))}, a ${esc(eur(cashback))} ti se vrati kao BONUS euri za iduću kupnju.</p>` : ""}
       ${plan.missing.length ? `<p class="small muted">Nema ni u jednoj tvojoj trgovini: ${plan.missing.map((m) => esc(m.naziv)).join(", ")}.</p>` : ""}
+      ${discountsHtml()}
     </section>`;
 
     h += `<section class="section" aria-label="Plan kupnje"><h2>Što kupiti gdje</h2>`;
@@ -675,28 +806,42 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
 
     const max = Math.max(...plan.single.map((s) => s.ukupno), 1);
     h += `<section class="section" aria-label="Sve u jednoj trgovini"><h2>Sve u jednoj trgovini</h2>
-      <p class="muted small">Ako ne želiš ići u više trgovina. Kuponi su uračunati.</p>
-      <ul class="card compare">${plan.single.map((s, i) => `<li class="${i === 0 && s.nema === 0 ? "best" : ""}">
-        <div><strong>${esc(chainName(s.lanac))}</strong>${!s.ima ? ` <span class="small muted">· nema ništa s popisa</span>` : s.nema ? ` <span class="small muted">· nema ${s.nema} ${plural(s.nema, "proizvod", "proizvoda", "proizvoda")}</span>` : ""}</div>
+      <p class="muted small">Ako sve kupuješ na jednom mjestu. Akcije, kartice, kuponi i uključeni popusti su uračunati. Dodirni trgovinu za popis što tamo kupiti.</p>
+      <ul class="card compare">${plan.single.map((s, i) => {
+        const open = openStore === s.lanac;
+        return `<li class="${i === 0 && s.nema === 0 ? "best" : ""}">
+        <button class="storebtn" data-act="store-list" data-chain="${s.lanac}" aria-expanded="${open}"><strong>${esc(chainName(s.lanac))}</strong>${!s.ima ? ` <span class="small muted">· nema ništa s popisa</span>` : s.nema ? ` <span class="small muted">· nema ${s.nema} ${plural(s.nema, "proizvod", "proizvoda", "proizvoda")}</span>` : ""}</button>
         <div class="num" style="font-weight:600">${s.ima ? esc(eur(s.ukupno)) : "–"}</div>
         ${s.ima ? `<div class="bar"><i style="width:${Math.max(4, Math.round((s.ukupno / max) * 100))}%"></i></div>` : ""}
-      </li>`).join("")}</ul>
+        ${open ? storeListHtml(plan, s.lanac) : ""}
+      </li>`;
+      }).join("")}</ul>
     </section>`;
     return h;
   }
 
+  function storeListHtml(plan, code) {
+    const rows = plan.perItem.map((r) => ({ item: r.item, best: r.offers.find((x) => x.lanac === code) }));
+    const have = rows.filter((x) => x.best), miss = rows.filter((x) => !x.best);
+    return `<div class="storelist">
+      ${have.length ? `<ul class="lines">${have.map((x) => lineHtml(x)).join("")}</ul>` : ""}
+      ${miss.length ? `<p class="small muted">Nema u ovoj trgovini: ${miss.map((x) => esc(x.item.naziv)).join(", ")}</p>` : ""}
+    </div>`;
+  }
+
   function lineHtml(r) {
     const o = r.best, item = r.item;
-    const unitNote = item.kom > 1 ? `${item.kom} × ${eur(o.cijena)}` : "";
-    const showName = item.kodovi.length > 1 || fold(o.naziv) !== fold(item.naziv);
+    const unitNoteTxt = item.kom > 1 ? `${item.kom} × ${eur(o.cijena)}` : "";
+    const showName = !!item.upit || (item.kodovi || []).length > 1 || fold(o.naziv) !== fold(item.naziv);
+    const per = item.upit ? unitNote(o) : "";
     return `<li class="line">
       <div class="grow wraptext"><strong>${esc(item.naziv)}</strong>${item.primjer ? ` <span class="badge example">Primjer</span>` : ""}</div>
       <div class="price">${priceTag(o.ukupno)}</div>
       <div class="meta">
         ${offerBadges(o)}
         ${o.redovna ? `<span class="old">${esc(eur(o.redovna))}</span>` : ""}
-        ${unitNote ? `<span class="small muted">${esc(unitNote)}</span>` : ""}
-        ${showName ? `<span class="small muted wraptext">${esc(o.naziv)}</span>` : ""}
+        ${unitNoteTxt ? `<span class="small muted">${esc(unitNoteTxt)}</span>` : ""}
+        ${showName ? `<span class="small muted wraptext">${esc(o.naziv)}${per ? ` · ${esc(per)}` : ""}</span>` : ""}
       </div>
     </li>`;
   }
@@ -704,8 +849,16 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   function popisHtml() {
     let h = "";
     const target = addingAltFor ? state.stavke.find((s) => s.id === addingAltFor) : null;
+    if (!target) {
+      h += `<section class="section bulk" aria-label="Upiši popis">
+        <h2>Upiši što kupuješ</h2>
+        <p class="small muted">Odvoji proizvode zarezom ili novim redom. Aplikacija će za svaki u svakoj trgovini sama naći najjeftiniji. Za određenu marku dodaj marku („čajna kobasica gavrilović”), a za određeno pakiranje količinu („toaletni papir 16/1”, „posni sir 500 g”).</p>
+        <textarea id="bulk" rows="3" aria-label="Popis za kupnju" placeholder="posni sir, toaletni papir, čajna kobasica gavrilović">${esc(bulkText)}</textarea>
+        <div><button class="btn primary" data-act="bulk-add">Dodaj na popis</button></div>
+      </section>`;
+    }
     h += `<section class="section" aria-label="Dodaj proizvod">
-      <h2>${target ? `Dodaj zamjenu za: ${esc(target.naziv)}` : "Dodaj proizvod"}</h2>
+      <h2>${target ? `Dodaj zamjenu za: ${esc(target.naziv)}` : "Ili odaberi točno određeni proizvod"}</h2>
       ${target ? `<p class="small muted">Odaberi drugu marku ili pakiranje koje ti jednako odgovara. Aplikacija će u svakoj trgovini uzeti najjeftiniji od njih. <button class="linkbtn" data-act="cancel-alt">Odustani</button></p>` : `<p class="small muted">Upiši naziv, marku ili količinu, npr. „mlijeko 2,8 1 l”, „jaja”, „ariel color”.</p>`}
       <div class="search">
         <input id="q" type="search" inputmode="search" autocomplete="off" aria-label="Traži proizvod" placeholder="Traži među ${katalog.proizvodi.length.toLocaleString("hr-HR")} proizvoda…" value="${esc(searchText)}"></div>
@@ -714,7 +867,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
 
     h += `<section class="section" aria-label="Moj popis"><div class="row"><h2 class="grow">Moj popis</h2><span class="small muted">${state.stavke.length} ${plural(state.stavke.length, "stavka", "stavke", "stavki")}</span></div>`;
     if (!state.stavke.length) {
-      h += `<div class="card empty"><p class="muted">Još nema proizvoda. Potraži prvi proizvod iznad, npr. mlijeko.</p></div>`;
+      h += `<div class="card empty"><p class="muted">Još nema proizvoda. Upiši ih iznad, npr. „posni sir, toaletni papir”.</p></div>`;
     } else {
       h += exampleNotice();
       currentPlan = computePlan();
@@ -728,7 +881,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   function resultsHtml() {
     const rows = search(searchText);
     if (!rows.length) return `<div class="card empty"><p class="muted">Ništa nije pronađeno. Pokušaj s kraćim nazivom, npr. samo „mlijeko”.</p></div>`;
-    return `<ul class="card results">${rows.map((r) => {
+    const generic = addingAltFor ? "" : `<div><button class="btn small" data-act="add-generic">+ Dodaj „${esc(searchText.trim())}” kao bilo koju marku (najjeftinija)</button></div>`;
+    return generic + `<ul class="card results">${rows.map((r) => {
       const best = cheapestSelected(r);
       const count = r[2].filter((p) => p != null).length;
       return `<li class="result${best ? "" : " unavailable"}">
@@ -745,15 +899,19 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   function itemHtml(item) {
     const sel = selectedChains();
     const planned = currentPlan && currentPlan.perItem.find((r) => r.item === item);
-    const offers = planned ? planned.offers : sel.map((c) => offerAt(item, c)).filter(Boolean).sort((a, b) => a.ukupno - b.ukupno);
+    const offers = planned ? planned.offers : sel.map((c) => offerAt(item, c)).filter(Boolean).sort(byOffer);
     const best = offers[0];
     const open = openItem === item.id;
+    const g = item.upit ? genericMatches(item) : null;
+    const ref = item.upit && currentPlan ? currentPlan.refs.get(item.id) : null;
     let h = `<div class="item">
       <div class="item-top">
         <div class="grow">
-          <div class="item-name">${esc(item.naziv)}${item.primjer ? ` <span class="badge example">Primjer</span>` : ""}</div>
-          <div class="small muted">${best ? `Najjeftinije: <strong>${esc(chainName(best.lanac))}</strong>, ${esc(eur(best.ukupno))}${item.kom > 1 ? " ukupno" : ""}` : "Nema u tvojim trgovinama"}
+          <div class="item-name">${esc(item.naziv)}${item.upit ? ` <span class="badge example">Bilo koja marka</span>` : ""}${item.primjer ? ` <span class="badge example">Primjer</span>` : ""}</div>
+          <div class="small muted">${best ? `Najjeftinije: <strong>${esc(chainName(best.lanac))}</strong>, ${esc(eur(best.ukupno))}${item.kom > 1 ? " ukupno" : ""}`
+            : g && !g.idx.length ? `Nijedan proizvod ne odgovara upitu „${esc(item.upit)}”. Probaj kraći ili drukčiji naziv.` : "Nema u tvojim trgovinama"}
           ${best ? offerBadges(best) : ""}</div>
+          ${best && item.upit ? `<div class="small muted wraptext">${esc(best.naziv)}${unitNote(best) ? ` · ${esc(unitNote(best))}` : ""}</div>` : ""}
         </div>
         <div class="qty" role="group" aria-label="Količina">
           <button data-act="qty" data-id="${item.id}" data-d="-1" aria-label="Manje">−</button>
@@ -765,27 +923,38 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     if (open) {
       h += `<ul class="prices">${offers.map((o, i) => `<li class="${i === 0 ? "cheapest" : ""}">
           <span class="store">${esc(chainName(o.lanac))}</span>
-          <span class="what">${esc(o.naziv)} ${offerBadges(o)}</span>
-          <span class="amt"><span class="num" style="font-weight:600">${esc(eur(o.ukupno))}</span>${o.redovna ? `<span class="old">${esc(eur(o.redovna * item.kom))}</span>` : o.kupon ? `<span class="old">${esc(eur(o.bezKupona))}</span>` : ""}</span>
+          <span class="what">${esc(o.naziv)}${item.upit && unitNote(o) ? ` · ${esc(unitNote(o))}` : ""} ${offerBadges(o)}${item.upit ? ` <button class="linkbtn small" data-act="exclude" data-id="${item.id}" data-code="${esc(o.kod)}" aria-label="Ne uzimaj ${esc(o.naziv)}">nije to</button>` : ""}</span>
+          <span class="amt"><span class="num" style="font-weight:600">${esc(eur(o.ukupno))}</span>${o.redovna ? `<span class="old">${esc(eur(o.redovna * item.kom))}</span>` : o.kupon || o.popust ? `<span class="old">${esc(eur(o.bezKupona))}</span>` : ""}</span>
         </li>`).join("")}</ul>`;
       const missing = sel.filter((c) => !offers.some((o) => o.lanac === c));
       if (missing.length) h += `<p class="small muted">Nema u: ${missing.map(chainName).join(", ")}</p>`;
-      h += `<div class="alts"><div class="small" style="font-weight:600">Proizvodi u ovoj stavci</div>${item.kodovi.map((k) => {
-        const row = byCode.get(k);
-        return `<div class="alt"><span class="grow">${esc(row ? row[1] : "Proizvod više nije na cjenicima")}</span>${item.kodovi.length > 1 ? `<button class="btn small ghost" data-act="rm-alt" data-id="${item.id}" data-code="${esc(k)}" aria-label="Makni ${esc(row ? row[1] : k)}">Makni</button>` : ""}</div>`;
-      }).join("")}</div>
-      <div class="row" style="flex-wrap:wrap">
-        <button class="btn small" data-act="alt" data-id="${item.id}">Dodaj zamjensku marku</button>
-        <button class="btn small" data-act="rename" data-id="${item.id}">Preimenuj</button>
+      if (item.upit) {
+        h += `<p class="small muted">${ref ? `Uspoređuju se pakiranja od oko ${esc(qtyText(ref))}. ` : ""}Za drugo pakiranje dodaj količinu u naziv, npr. „${esc(queryWords(item.upit).join(" "))} ${ref && ref.dim === "kom" ? "16/1" : "500 g"}”. Ako aplikacija uzme krivi proizvod, dodirni „nije to”.</p>`;
+        const skipped = item.iskljuceni || [];
+        if (skipped.length) h += `<div class="alts"><div class="small" style="font-weight:600">Isključeni proizvodi</div>${skipped.map((k) => {
+          const row = byCode.get(k);
+          return `<div class="alt"><span class="grow">${esc(row ? row[1] : k)}</span><button class="btn small ghost" data-act="unexclude" data-id="${item.id}" data-code="${esc(k)}">Vrati</button></div>`;
+        }).join("")}</div>`;
+      } else {
+        h += `<div class="alts"><div class="small" style="font-weight:600">Proizvodi u ovoj stavci</div>${item.kodovi.map((k) => {
+          const row = byCode.get(k);
+          return `<div class="alt"><span class="grow">${esc(row ? row[1] : "Proizvod više nije na cjenicima")}</span>${item.kodovi.length > 1 ? `<button class="btn small ghost" data-act="rm-alt" data-id="${item.id}" data-code="${esc(k)}" aria-label="Makni ${esc(row ? row[1] : k)}">Makni</button>` : ""}</div>`;
+        }).join("")}</div>`;
+      }
+      h += `<div class="row" style="flex-wrap:wrap">
+        ${item.upit ? "" : `<button class="btn small" data-act="alt" data-id="${item.id}">Dodaj zamjensku marku</button>`}
+        <button class="btn small" data-act="rename" data-id="${item.id}">${item.upit ? "Promijeni" : "Preimenuj"}</button>
         <button class="btn small danger" data-act="del" data-id="${item.id}">Obriši</button>
       </div>
-      ${renaming === item.id ? `<form class="row" data-form="rename" data-id="${item.id}"><input id="rename-${item.id}" class="grow" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface)" value="${esc(item.naziv)}" aria-label="Novi naziv"><button class="btn small primary">Spremi</button></form>` : ""}`;
+      ${renaming === item.id ? `<form class="row" data-form="rename" data-id="${item.id}"><input id="rename-${item.id}" class="grow" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface)" value="${esc(item.upit || item.naziv)}" aria-label="${item.upit ? "Što tražiš" : "Novi naziv"}"><button class="btn small primary">Spremi</button></form>` : ""}`;
     }
     h += `</div>`;
     return h;
   }
   let renaming = null;
   let currentPlan = null;
+  let openStore = null;   // trgovina čiji je popis otvoren u "Sve u jednoj trgovini"
+  let bulkText = "";
 
   function kuponiHtml() {
     const itemsOpts = state.stavke.map((s) => `<option value="${s.id}">${esc(s.naziv)}</option>`).join("");
@@ -900,6 +1069,24 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
         <span>Imam ${esc(card.naziv)} <span class="muted">· ${card.cijene.size.toLocaleString("hr-HR")} nižih cijena uz karticu${[...card.cijene.values()].some((p) => p.some((x) => x[3] === "kupon")) ? ", dio njih treba aktivirati kao kupon u aplikaciji" : ""}</span></span>
       </label></div>` : ""}</li>`;
       }).join("")}</ul>
+      <h2>Popusti na račun</h2>
+      <p class="muted small">Npr. 10% u Konzumu uz Croatia osiguranje, jednom mjesečno. Uključen popust se uračunava u usporedbu, a uključiš ga i isključiš i na početku kartice „Gdje kupiti”.</p>
+      ${(state.popusti || []).length ? `<ul class="card stores">${state.popusti.map((d) => `<li><label for="popt-${d.id}">
+        <input id="popt-${d.id}" type="checkbox" data-popust="${d.id}" ${d.ukljucen ? "checked" : ""}>
+        <span class="grow"><strong>−${d.posto}% ${esc(d.naziv)}</strong> · ${esc(chainName(d.lanac))}<br><span class="small muted">${d.samoRedovne ? "Samo proizvodi koji nisu na sniženju" : "Svi proizvodi"}${d.napomena ? ` · ${esc(d.napomena)}` : ""}</span></span>
+        <button class="btn small ghost danger" data-act="del-popust" data-id="${d.id}">Obriši</button>
+      </label></li>`).join("")}</ul>` : ""}
+      <details class="card"${(state.popusti || []).length ? "" : " open"}><summary class="form" style="cursor:pointer"><h3 style="display:inline">Dodaj popust na račun</h3></summary>
+      <form class="form" data-form="popust" style="padding-top:0">
+        <div class="two">
+          <div class="field"><label for="p-lanac">Trgovina</label><select id="p-lanac">${chains().filter((c) => c.poslovnica > 0).map((c) => `<option value="${c.kod}">${esc(c.naziv)}</option>`).join("")}</select></div>
+          <div class="field"><label for="p-posto">Popust (%)</label><input id="p-posto" type="number" inputmode="numeric" min="1" max="50" step="1" value="10"></div>
+        </div>
+        <div class="field"><label for="p-naziv">Naziv</label><input id="p-naziv" maxlength="40" placeholder="npr. Croatia osiguranje"></div>
+        <div class="field"><label for="p-napomena">Napomena</label><input id="p-napomena" maxlength="60" placeholder="npr. jednom mjesečno"></div>
+        <label class="row small" for="p-redovne"><input id="p-redovne" type="checkbox" checked> Vrijedi samo za proizvode koji nisu na sniženju</label>
+        <div><button class="btn primary">Dodaj popust</button></div>
+      </form></details>
       <h2>Moj grad</h2>
       <p class="muted small">Cijene se razlikuju od poslovnice do poslovnice. Trenutno je prikazana najčešća cijena svakog lanca za ${katalog.grad ? `grad ${esc(katalog.grad)}` : "cijelu Hrvatsku"}. Kad odabereš grad, cijene za njega stižu sa sljedećim dnevnim osvježavanjem.</p>
       <div class="field"><label for="grad">Grad</label><select id="grad"><option value="">Cijela Hrvatska</option>${cityOpts}</select></div>
@@ -920,6 +1107,13 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   }
 
   // ---------- Radnje ----------
+  function addGeneric(text) {
+    const upit = String(text || "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (upit.length < 2 || state.stavke.some((s) => s.upit && fold(s.upit) === fold(upit))) return false;
+    state.stavke.push({ id: uid(), naziv: upit[0].toUpperCase() + upit.slice(1), upit, kom: 1, iskljuceni: [] });
+    return true;
+  }
+
   function addItem(code) {
     const row = byCode.get(code);
     if (!row) return;
@@ -931,7 +1125,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
       commit("Zamjena je dodana.");
       return;
     }
-    const existing = state.stavke.find((s) => s.kodovi.includes(code));
+    const existing = state.stavke.find((s) => (s.kodovi || []).includes(code));
     if (existing) { existing.kom += 1; commit(`Već je na popisu, sad ${existing.kom} kom.`); return; }
     state.stavke.push({ id: uid(), naziv: row[1], kom: 1, kodovi: [code] });
     commit("Dodano na popis.");
@@ -1050,6 +1244,33 @@ Ako na slikama nema kupona, vrati [].`;
     const item = id ? state.stavke.find((s) => s.id === id) : null;
     switch (act) {
       case "go": setTab(el.dataset.tab); break;
+      case "add-generic":
+        if (addGeneric(searchText)) { searchText = ""; commit("Dodano na popis. Aplikacija bira najjeftiniju marku."); }
+        else toast("To je već na popisu.");
+        break;
+      case "bulk-add": {
+        const text = ($("#bulk") || {}).value || bulkText;
+        // Zarez dijeli proizvode, osim u brojevima ("1,5 l").
+        const added = text.split(/\n|;|,(?!\d)/).map((x) => x.trim()).filter((x) => x.length >= 2).filter((x) => addGeneric(x)).length;
+        if (added) { bulkText = ""; commit(`Dodano na popis: ${added}.`); }
+        else toast("Upiši barem jedan proizvod koji još nije na popisu.");
+        break;
+      }
+      case "exclude":
+        if (item) { item.iskljuceni = [...new Set([...(item.iskljuceni || []), el.dataset.code])]; commit("Taj proizvod se više neće birati."); }
+        break;
+      case "unexclude":
+        if (item) { item.iskljuceni = (item.iskljuceni || []).filter((c) => c !== el.dataset.code); commit("Proizvod je vraćen."); }
+        break;
+      case "store-list": {
+        const code = el.dataset.chain;
+        openStore = openStore === code && el.classList.contains("storebtn") ? null : code;
+        render();
+        const btn = openStore && document.querySelector(`.storebtn[data-chain="${openStore}"]`);
+        if (btn) btn.scrollIntoView({ block: "start", behavior: "smooth" });
+        break;
+      }
+      case "del-popust": state.popusti = (state.popusti || []).filter((d) => d.id !== id); commit("Popust je obrisan."); break;
       case "add": addItem(el.dataset.code); break;
       case "qty": if (item) { item.kom = Math.max(1, Math.min(99, item.kom + Number(el.dataset.d))); commit(); } break;
       case "toggle": openItem = openItem === id ? null : id; renaming = null; render(); break;
@@ -1097,6 +1318,7 @@ Ako na slikama nema kupona, vrati [].`;
 
   document.addEventListener("input", (ev) => {
     const t = ev.target;
+    if (t.id === "bulk") { bulkText = t.value; return; }
     if (t.id === "q") {
       searchText = t.value;
       clearTimeout(searchTimer);
@@ -1111,6 +1333,11 @@ Ako na slikama nema kupona, vrati [].`;
 
   document.addEventListener("change", (ev) => {
     const t = ev.target;
+    if (t.dataset.popust) {
+      const d = (state.popusti || []).find((x) => x.id === t.dataset.popust);
+      if (d) { d.ukljucen = t.checked; commit(t.checked ? `Popust ${d.naziv} je uračunat.` : `Popust ${d.naziv} se ne računa.`); }
+      return;
+    }
     if (t.dataset.card) {
       state.kartice = Object.assign({}, state.kartice, { [t.dataset.card]: t.checked });
       const name = cardPrices.get(t.dataset.card)?.naziv || "kartica";
@@ -1160,8 +1387,20 @@ Ako na slikama nema kupona, vrati [].`;
       commit("Kupon je dodan i uračunat.");
     } else if (f.dataset.form === "rename") {
       const item = state.stavke.find((s) => s.id === f.dataset.id);
-      const v = $(`#rename-${f.dataset.id}`).value.trim();
-      if (item && v) { item.naziv = v.slice(0, 80); renaming = null; commit("Naziv je promijenjen."); }
+      const v = $(`#rename-${f.dataset.id}`).value.replace(/\s+/g, " ").trim().slice(0, 80);
+      if (item && v) {
+        if (item.upit) { item.upit = v; item.naziv = v[0].toUpperCase() + v.slice(1); item.iskljuceni = []; }
+        else item.naziv = v;
+        renaming = null;
+        commit(item.upit ? "Pretraga je promijenjena." : "Naziv je promijenjen.");
+      }
+    } else if (f.dataset.form === "popust") {
+      const posto = parseInt($("#p-posto").value, 10);
+      const naziv = $("#p-naziv").value.trim() || "Popust";
+      if (!(posto >= 1 && posto <= 50)) { toast("Upiši popust između 1 i 50%."); return; }
+      state.popusti = [...(state.popusti || []), { id: uid(), lanac: $("#p-lanac").value, naziv: naziv.slice(0, 40), posto,
+        samoRedovne: $("#p-redovne").checked, napomena: $("#p-napomena").value.trim().slice(0, 60), ukljucen: true }];
+      commit(`Popust ${naziv} je dodan i uračunat.`);
     }
   });
 
