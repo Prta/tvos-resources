@@ -22,11 +22,15 @@ objavljuju na svojim stranicama (robots.txt to dopušta):
 - **Konzum MultiPlusCard**: https://www.konzum.hr/web/posebne-ponude, jedna stranica u sekundi
 - **Kaufland Card XTRA**: JSON s tjednom ponudom na https://www.kaufland.hr/ponuda/pregled.html
 
+Eurospin dio tjednih akcija ne upisuje u službeni cjenik (npr. 9. 11. 2026. trajno mlijeko
+3,5% 1 l: cjenik 1,09 €, akcija 0,65 €). Te akcije skripta preuzima sa stranice
+https://www.eurospin.hr/akcija/ i povezuje s cjenikom po šifri iz naziva slike proizvoda.
+
 Skripta ih povezuje s cjenikom po šifri artikla trgovine i sprema s razdobljem
 važenja; isključuje se s `--bez-kartica`. Ostale trgovine (stanje 9. 11. 2026.):
 Plodine Card cijene postoje samo na slikama, Lidl Plus, Spar, Studenac (Moj Studenac)
 i dio Konzuma (MultiPlus BONUS) imaju osobne kupone samo u aplikaciji, Eurospin nema
-program vjernosti.
+program vjernosti (ali ima akcije kojih nema u cjeniku, vidi gore).
 
 Kuponi iz aplikacija trgovina (Lidl Plus, Kaufland Card XTRA i sl.) nisu javni, pa
 ih korisnik dodaje u aplikaciji ručno ili sa snimke zaslona.

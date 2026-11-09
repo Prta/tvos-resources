@@ -268,7 +268,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   // ---------- Stanje ----------
   let katalog = null;          // {datum, grad, lanci, gradovi, proizvodi}
   let byCode = new Map();      // kod -> red iz kataloga
-  let cardPrices = new Map();  // lanac -> {naziv, cijene: Map(kod -> [centi, vrijediDo])}
+  let cardPrices = new Map();  // lanac -> [{naziv, svi, cijene: Map(kod -> [[centi, od, do], ...])}]
   let folded = null;           // nazivi bez dijakritika, za pretragu
   let katalogError = "";
   let state = defaultState();
@@ -317,15 +317,15 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     if (p == null) return null;
     const base = Array.isArray(p) ? { cijena: p[0], redovna: p[1] } : { cijena: p, redovna: null };
     const code = katalog.lanci[chainIdx].kod;
-    const card = cardPrices.get(code);
-    const periods = card && hasCard(code) ? card.cijene.get(row[0]) : null;
-    if (periods) {
-      const today = todayIso();
+    const today = todayIso();
+    let best = base;
+    for (const src of cardPrices.get(code) || []) {
+      if (!src.svi && !hasCard(code)) continue;
       // Razdoblja su [centi, od, do]; prazan datum znači da granica nije poznata.
-      const c = periods.find(([price, from, to]) => (!from || from <= today) && (!to || to >= today) && price < base.cijena);
-      if (c) return { cijena: c[0], redovna: base.redovna || base.cijena, kartica: card.naziv };
+      const c = (src.cijene.get(row[0]) || []).find(([price, from, to]) => (!from || from <= today) && (!to || to >= today));
+      if (c && c[0] < best.cijena) best = { cijena: c[0], redovna: base.redovna || base.cijena, kartica: src.svi ? null : src.naziv };
     }
-    return base;
+    return best;
   }
 
   // ---------- Kuponi ----------
@@ -512,7 +512,11 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
       }
       katalog = JSON.parse(text);
       byCode = new Map(katalog.proizvodi.map((r) => [r[0], r]));
-      cardPrices = new Map((katalog.kartice || []).map((k) => [k.lanac, { naziv: k.naziv, cijene: new Map(Object.entries(k.cijene || {})) }]));
+      cardPrices = new Map();
+      for (const k of katalog.kartice || []) {
+        if (!cardPrices.has(k.lanac)) cardPrices.set(k.lanac, []);
+        cardPrices.get(k.lanac).push({ naziv: k.naziv, svi: !!k.svi, cijene: new Map(Object.entries(k.cijene || {})) });
+      }
       const label = katalog.grad ? `poslovnice u gradu ${katalog.grad}` : "cijela Hrvatska";
       $("#dataline").textContent = `Cijene iz službenih cjenika od ${fmtDate(katalog.datum)} · ${label}`;
     } catch (e) {
@@ -878,7 +882,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     return `<section class="section"><h2>Moje trgovine</h2>
       <p class="muted small">Označi trgovine u kojima kupuješ ili čije aplikacije imaš. Usporedba gleda samo njih.</p>
       <ul class="card stores">${chains().map((c) => {
-        const card = cardPrices.get(c.kod);
+        const card = (cardPrices.get(c.kod) || []).find((src) => !src.svi);
         return `<li><label>
         <input type="checkbox" data-chain="${c.kod}" ${sel.includes(c.kod) ? "checked" : ""} ${c.poslovnica ? "" : "disabled"}>
         <span class="grow"><strong>${esc(c.naziv)}</strong><br><span class="small muted">${c.poslovnica ? `${c.poslovnica} ${plural(c.poslovnica, "poslovnica", "poslovnice", "poslovnica")} · ${(c.proizvoda || 0).toLocaleString("hr-HR")} proizvoda` : "Nema cjenika"}${c.cijelaHrvatska ? `<br>U gradu ${esc(katalog.grad)} nema poslovnica u cjenicima, pa su prikazane najčešće cijene u Hrvatskoj.` : ""}</span></span>
@@ -897,6 +901,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
           <li>Aplikacija koristi cjenike od ${esc(fmtDate(katalog.datum))}. Cijene se osvježavaju jednom dnevno.</li>
           <li>Akcijske cijene iz cjenika su uračunate. Kuponi iz aplikacija trgovina nisu javni, pa ih dodaješ u kartici Kuponi.</li>
           <li>Cijene uz Konzumovu MultiPlusCard i Kaufland Card XTRA nisu u službenim cjenicima. Aplikacija ih svaki dan preuzima sa stranica tih trgovina, gdje su javno objavljene, i računa ih samo dok vrijede.</li>
+          <li>Eurospin dio tjednih akcija ne upisuje u službeni cjenik, pa ih aplikacija preuzima s Eurospinove stranice „Akcija”.</li>
           <li>Cijena lanca je najčešća cijena među njegovim poslovnicama, pa se u pojedinoj poslovnici može malo razlikovati.</li>
         </ul>
       </details>

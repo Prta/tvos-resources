@@ -35,6 +35,7 @@ from datetime import date
 ARCHIVE_LIST = "https://api.cijene.dev/v0/list"
 KONZUM_OFFERS = "https://www.konzum.hr/web/posebne-ponude?page={page}&per_page=100"
 KAUFLAND_OFFERS = "https://www.kaufland.hr/ponuda/pregled.html"
+EUROSPIN_OFFERS = "https://www.eurospin.hr/akcija/"
 USER_AGENT = "PametnaKosarica/1.0 (osobna usporedba cijena; github.com/Prta/tvos-resources)"
 
 # Redoslijed je bitan: aplikacija cijene čita po indeksu lanca.
@@ -182,6 +183,44 @@ def fetch_kaufland_card_prices() -> dict:
     return {article: sorted(periods, key=lambda p: p[1]) for article, periods in found.items()}
 
 
+def fetch_eurospin_offers() -> dict:
+    """Tjedne akcije s Eurospinove stranice "Akcija".
+
+    Eurospin dio tjednih akcija ne upisuje u službeni cjenik (npr. 9. 11. 2026. trajno
+    mlijeko 3,5% 1 l: cjenik 1,09 €, akcija 0,65 €). Stranica uz svaku akciju ima
+    sliku nazvanu po šifri proizvoda (".../smt/12111901.jpg" = šifra "012111901").
+    Vraća {eurospin_product_id: [(centi, od, do)]}.
+    """
+    req = urllib.request.Request(EUROSPIN_OFFERS, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        text = resp.read().decode("utf-8", "replace")
+    today = date.today()
+
+    def day(d: str, m: str) -> str:
+        when = date(today.year, int(m), int(d))
+        if (when - today).days < -180:  # akcija preko Nove godine
+            when = date(today.year + 1, int(m), int(d))
+        elif (when - today).days > 180:
+            when = date(today.year - 1, int(m), int(d))
+        return when.isoformat()
+
+    found = defaultdict(set)
+    for item in text.split('class="sn_promo_grid_item"')[1:]:
+        dates = re.search(r'date_current_promo">\s*(\d{1,2})\.(\d{1,2})\.\s*-\s*(\d{1,2})\.(\d{1,2})\.', item)
+        image = re.search(r'/smt/(\d+)\.(?:jpe?g|png|webp)', item)
+        price = re.search(r'itemprop="price">\s*€\s*([\d.,]+)', item)
+        if not (dates and image and price):
+            continue
+        amount = price.group(1)
+        if "," in amount:
+            amount = amount.replace(".", "")
+        cents_value = cents(amount)
+        if cents_value:
+            period = (cents_value, day(dates.group(1), dates.group(2)), day(dates.group(3), dates.group(4)))
+            found[image.group(1).zfill(9)].add(period)
+    return {pid: sorted(periods, key=lambda p: p[1]) for pid, periods in found.items()}
+
+
 def process_chain(archive: zipfile.ZipFile, chain: str, city: str | None):
     stores = {}
     for row in open_csv(archive, f"{chain}/stores.csv"):
@@ -267,10 +306,11 @@ def build(zip_path: str, archive_date: str, city: str | None, card_sources: dict
             infos[key][code] = info
         print(f"{label}: {store_count} poslovnica, {len(prices)} proizvoda", file=sys.stderr)
 
-    # Cijene uz kartice vjernosti: {kod: [[centi, od, do], ...]}, samo kad su niže od cijene iz cjenika.
+    # Cijene uz kartice vjernosti i akcije sa stranica trgovina koje nisu u cjeniku:
+    # {kod: [[centi, od, do], ...]}, samo kad su niže od cijene iz cjenika.
     cards = []
     chain_codes = [c for c, _ in CHAINS]
-    for chain, (card_name, by_article) in (card_sources or {}).items():
+    for chain, (card_name, by_article, for_everyone) in (card_sources or {}).items():
         if not by_article or f"{chain}/products.csv" not in names:
             continue
         idx = chain_codes.index(chain)
@@ -286,7 +326,10 @@ def build(zip_path: str, archive_date: str, city: str | None, card_sources: dict
             lower = [list(p) for p in periods if p[0] < final]
             if lower:
                 card_prices[key] = lower
-        cards.append({"lanac": chain, "naziv": card_name, "cijene": card_prices})
+        source = {"lanac": chain, "naziv": card_name, "cijene": card_prices}
+        if for_everyone:
+            source["svi"] = True  # akcija za sve kupce, ne treba kartica
+        cards.append(source)
         print(f"{card_name}: {len(by_article)} cijena na stranici, {len(card_prices)} povezano s cjenikom", file=sys.stderr)
 
     rows = []
@@ -327,15 +370,19 @@ def main() -> None:
     parser.add_argument("--datum", help="datum arhive kad se koristi --zip (GGGG-MM-DD)")
     parser.add_argument("--grad", help="samo poslovnice u ovom gradu, npr. Zagreb")
     parser.add_argument("--izlaz", default="katalog.json", help="izlazna datoteka")
-    parser.add_argument("--bez-kartica", action="store_true", help="ne preuzimaj cijene uz kartice vjernosti")
+    parser.add_argument("--bez-kartica", action="store_true",
+                        help="ne preuzimaj cijene uz kartice vjernosti ni akcije sa stranica trgovina")
     args = parser.parse_args()
 
     card_sources = {}
     if not args.bez_kartica:
-        for chain, card_name, fetch in (("konzum", "MultiPlusCard", fetch_konzum_card_prices),
-                                        ("kaufland", "Kaufland Card XTRA", fetch_kaufland_card_prices)):
+        for chain, card_name, fetch, for_everyone in (
+            ("konzum", "MultiPlusCard", fetch_konzum_card_prices, False),
+            ("kaufland", "Kaufland Card XTRA", fetch_kaufland_card_prices, False),
+            ("eurospin", "Eurospin akcija", fetch_eurospin_offers, True),
+        ):
             try:
-                card_sources[chain] = (card_name, fetch())
+                card_sources[chain] = (card_name, fetch(), for_everyone)
             except Exception as exc:  # stranice trgovina nisu obvezne, cjenici rade i bez njih
                 print(f"Upozorenje: {card_name} cijene nisu preuzete ({exc})", file=sys.stderr)
 
