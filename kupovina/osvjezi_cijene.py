@@ -34,6 +34,7 @@ from datetime import date
 
 ARCHIVE_LIST = "https://api.cijene.dev/v0/list"
 KONZUM_OFFERS = "https://www.konzum.hr/web/posebne-ponude?page={page}&per_page=100"
+KAUFLAND_OFFERS = "https://www.kaufland.hr/ponuda/pregled.html"
 USER_AGENT = "PametnaKosarica/1.0 (osobna usporedba cijena; github.com/Prta/tvos-resources)"
 
 # Redoslijed je bitan: aplikacija cijene čita po indeksu lanca.
@@ -110,7 +111,8 @@ def fetch_konzum_card_prices(delay: float = 1.0, max_pages: int = 60) -> dict:
     """MultiPlusCard cijene s Konzumove stranice "Posebne ponude".
 
     Službeni cjenici ne sadrže cijene uz karticu vjernosti, ali ih Konzum javno
-    prikazuje uz proizvode na akciji. Vraća {konzum_product_id: (centi, "GGGG-MM-DD" ili "")}.
+    prikazuje uz proizvode na akciji. Vraća {konzum_product_id: [(centi, od, do)]},
+    datumi su "GGGG-MM-DD" ili "".
     """
     found = {}
     for page in range(1, max_pages + 1):
@@ -131,12 +133,53 @@ def fetch_konzum_card_prices(delay: float = 1.0, max_pages: int = 60) -> dict:
             until_iso = f"{until.group(3)}-{int(until.group(2)):02d}-{int(until.group(1)):02d}" if until else ""
             price = cents(amount)
             if price:
-                found[pid.group(1)] = (price, until_iso)
+                found[pid.group(1)] = [(price, "", until_iso)]
                 new += 1
         if not tiles or (new == 0 and page > 1 and not any("MultiPlusCard cijena" in t for t in tiles)):
             break
         time.sleep(delay)  # pristojan razmak između zahtjeva
     return found
+
+
+def fetch_kaufland_card_prices() -> dict:
+    """Cijene uz Kaufland Card XTRA iz podataka stranice s tjednom ponudom.
+
+    Stranica sadrži JSON s ponudama ovog i sljedećeg tjedna; ponude uz karticu imaju
+    polje loyaltyFormattedPrice. Vraća {kaufland_artikl: [(centi, od, do), ...]}.
+    """
+    req = urllib.request.Request(KAUFLAND_OFFERS, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=90) as resp:
+        text = resp.read().decode("utf-8", "replace")
+    anchor = text.find('"offerData":')
+    if anchor < 0:
+        raise ValueError("na stranici nema podataka o ponudi")
+    decoder = json.JSONDecoder()
+    data, pos = None, anchor
+    for _ in range(5000):  # traži objekt koji sadrži "offerData"
+        pos = text.rfind("{", 0, pos)
+        if pos < 0:
+            break
+        try:
+            obj, _ = decoder.raw_decode(text, pos)
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and "offerData" in obj:
+            data = obj
+            break
+    if data is None:
+        raise ValueError("podaci o ponudi se ne mogu pročitati")
+    found = defaultdict(set)
+    for cycle in data["offerData"].get("cycles", []):
+        for category in cycle.get("categories", []):
+            for offer in category.get("offers", []):
+                card = offer.get("loyaltyFormattedPrice")
+                article = offer.get("klNr")
+                if not card or not article:
+                    continue
+                price = cents(card.replace("€", "").strip())
+                if price:
+                    found[article].add((price, offer.get("dateFrom") or "", offer.get("dateTo") or ""))
+    return {article: sorted(periods, key=lambda p: p[1]) for article, periods in found.items()}
 
 
 def process_chain(archive: zipfile.ZipFile, chain: str, city: str | None):
@@ -201,7 +244,7 @@ def process_chain(archive: zipfile.ZipFile, chain: str, city: str | None):
     return len(stores), result, cities, national
 
 
-def build(zip_path: str, archive_date: str, city: str | None, konzum_card: dict | None = None) -> dict:
+def build(zip_path: str, archive_date: str, city: str | None, card_sources: dict | None = None) -> dict:
     archive = zipfile.ZipFile(zip_path)
     names = set(archive.namelist())
     merged = defaultdict(dict)
@@ -224,22 +267,27 @@ def build(zip_path: str, archive_date: str, city: str | None, konzum_card: dict 
             infos[key][code] = info
         print(f"{label}: {store_count} poslovnica, {len(prices)} proizvoda", file=sys.stderr)
 
+    # Cijene uz kartice vjernosti: {kod: [[centi, od, do], ...]}, samo kad su niže od cijene iz cjenika.
     cards = []
-    if konzum_card and "konzum/products.csv" in names:
-        idx = [c for c, _ in CHAINS].index("konzum")
-        id_to_key = {row["product_id"]: product_key("konzum", row["product_id"], row.get("barcode", ""))
-                     for row in open_csv(archive, "konzum/products.csv")}
+    chain_codes = [c for c, _ in CHAINS]
+    for chain, (card_name, by_article) in (card_sources or {}).items():
+        if not by_article or f"{chain}/products.csv" not in names:
+            continue
+        idx = chain_codes.index(chain)
+        id_to_key = {row["product_id"]: product_key(chain, row["product_id"], row.get("barcode", ""))
+                     for row in open_csv(archive, f"{chain}/products.csv")}
         card_prices = {}
-        for pid, (price, until) in konzum_card.items():
-            key = id_to_key.get(pid)
+        for article, periods in by_article.items():
+            key = id_to_key.get(article)
             current = merged.get(key, {}).get(idx) if key else None
             if current is None:
                 continue
             final = current[0] if isinstance(current, list) else current
-            if price < final:
-                card_prices[key] = [price, until]
-        cards.append({"lanac": "konzum", "naziv": "MultiPlusCard", "cijene": card_prices})
-        print(f"Konzum MultiPlusCard: {len(konzum_card)} cijena na stranici, {len(card_prices)} povezano s cjenikom", file=sys.stderr)
+            lower = [list(p) for p in periods if p[0] < final]
+            if lower:
+                card_prices[key] = lower
+        cards.append({"lanac": chain, "naziv": card_name, "cijene": card_prices})
+        print(f"{card_name}: {len(by_article)} cijena na stranici, {len(card_prices)} povezano s cjenikom", file=sys.stderr)
 
     rows = []
     for key, by_chain in merged.items():
@@ -282,12 +330,14 @@ def main() -> None:
     parser.add_argument("--bez-kartica", action="store_true", help="ne preuzimaj cijene uz kartice vjernosti")
     args = parser.parse_args()
 
-    konzum_card = None
+    card_sources = {}
     if not args.bez_kartica:
-        try:
-            konzum_card = fetch_konzum_card_prices()
-        except Exception as exc:  # stranica trgovine nije obvezna, cjenici rade i bez nje
-            print(f"Upozorenje: MultiPlusCard cijene nisu preuzete ({exc})", file=sys.stderr)
+        for chain, card_name, fetch in (("konzum", "MultiPlusCard", fetch_konzum_card_prices),
+                                        ("kaufland", "Kaufland Card XTRA", fetch_kaufland_card_prices)):
+            try:
+                card_sources[chain] = (card_name, fetch())
+            except Exception as exc:  # stranice trgovina nisu obvezne, cjenici rade i bez njih
+                print(f"Upozorenje: {card_name} cijene nisu preuzete ({exc})", file=sys.stderr)
 
     downloaded = None
     if args.zip:
@@ -298,7 +348,7 @@ def main() -> None:
         zip_path = downloaded = download(url)
 
     try:
-        data = build(zip_path, archive_date, args.grad, konzum_card)
+        data = build(zip_path, archive_date, args.grad, card_sources)
     finally:
         if downloaded:
             os.unlink(downloaded)  # arhiva ima oko 150 MB, ne ostavljaj je na disku

@@ -16,10 +16,17 @@ Popis kupnje koji za svaki proizvod pokaže u kojoj je trgovini najjeftiniji.
 3. Cijene se osvježavaju jednom dnevno: zakazani zadatak pokrene skriptu (s gradom
    iz dokumenta `kosarica/glavna`) i ponovno objavi `katalog.json` uz aplikaciju.
 
-Konzumove cijene uz MultiPlusCard nisu u službenim cjenicima, ali ih Konzum javno
-prikazuje na stranici https://www.konzum.hr/web/posebne-ponude (robots.txt je
-dopušta). Skripta ih preuzima jednu stranicu u sekundi i povezuje s cjenikom po
-Konzumovoj šifri proizvoda; isključuje se s `--bez-kartica`.
+Cijene uz kartice vjernosti nisu u službenim cjenicima, ali ih dvije trgovine javno
+objavljuju na svojim stranicama (robots.txt to dopušta):
+
+- **Konzum MultiPlusCard**: https://www.konzum.hr/web/posebne-ponude, jedna stranica u sekundi
+- **Kaufland Card XTRA**: JSON s tjednom ponudom na https://www.kaufland.hr/ponuda/pregled.html
+
+Skripta ih povezuje s cjenikom po šifri artikla trgovine i sprema s razdobljem
+važenja; isključuje se s `--bez-kartica`. Ostale trgovine (stanje 9. 11. 2026.):
+Plodine Card cijene postoje samo na slikama, Lidl Plus, Spar, Studenac (Moj Studenac)
+i dio Konzuma (MultiPlus BONUS) imaju osobne kupone samo u aplikaciji, Eurospin nema
+program vjernosti.
 
 Kuponi iz aplikacija trgovina (Lidl Plus, Kaufland Card XTRA i sl.) nisu javni, pa
 ih korisnik dodaje u aplikaciji ručno ili sa snimke zaslona.

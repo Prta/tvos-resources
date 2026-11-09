@@ -318,9 +318,12 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     const base = Array.isArray(p) ? { cijena: p[0], redovna: p[1] } : { cijena: p, redovna: null };
     const code = katalog.lanci[chainIdx].kod;
     const card = cardPrices.get(code);
-    const c = card && hasCard(code) ? card.cijene.get(row[0]) : null;
-    if (c && (!c[1] || c[1] >= todayIso()) && c[0] < base.cijena) {
-      return { cijena: c[0], redovna: base.redovna || base.cijena, kartica: card.naziv };
+    const periods = card && hasCard(code) ? card.cijene.get(row[0]) : null;
+    if (periods) {
+      const today = todayIso();
+      // Razdoblja su [centi, od, do]; prazan datum znači da granica nije poznata.
+      const c = periods.find(([price, from, to]) => (!from || from <= today) && (!to || to >= today) && price < base.cijena);
+      if (c) return { cijena: c[0], redovna: base.redovna || base.cijena, kartica: card.naziv };
     }
     return base;
   }
@@ -893,7 +896,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
           <li>Od svibnja 2025. trgovci u Hrvatskoj moraju svaki dan objaviti cjenike svih poslovnica (Odluka, NN 75/2025). Podatke skuplja javni servis cijene.dev.</li>
           <li>Aplikacija koristi cjenike od ${esc(fmtDate(katalog.datum))}. Cijene se osvježavaju jednom dnevno.</li>
           <li>Akcijske cijene iz cjenika su uračunate. Kuponi iz aplikacija trgovina nisu javni, pa ih dodaješ u kartici Kuponi.</li>
-          <li>Konzumove cijene uz MultiPlusCard nisu u službenim cjenicima. Aplikacija ih svaki dan preuzima s Konzumove stranice „Posebne ponude”, gdje su javno objavljene.</li>
+          <li>Cijene uz Konzumovu MultiPlusCard i Kaufland Card XTRA nisu u službenim cjenicima. Aplikacija ih svaki dan preuzima sa stranica tih trgovina, gdje su javno objavljene, i računa ih samo dok vrijede.</li>
           <li>Cijena lanca je najčešća cijena među njegovim poslovnicama, pa se u pojedinoj poslovnici može malo razlikovati.</li>
         </ul>
       </details>
