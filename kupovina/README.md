@@ -27,13 +27,32 @@ Eurospin dio tjednih akcija ne upisuje u službeni cjenik (npr. 9. 11. 2026. tra
 https://www.eurospin.hr/akcija/ i povezuje s cjenikom po šifri iz naziva slike proizvoda.
 
 Skripta ih povezuje s cjenikom po šifri artikla trgovine i sprema s razdobljem
-važenja; isključuje se s `--bez-kartica`. Ostale trgovine (stanje 9. 11. 2026.):
-Plodine Card cijene postoje samo na slikama, Lidl Plus, Spar, Studenac (Moj Studenac)
-i dio Konzuma (MultiPlus BONUS) imaju osobne kupone samo u aplikaciji, Eurospin nema
-program vjernosti (ali ima akcije kojih nema u cjeniku, vidi gore).
+važenja; isključuje se s `--bez-kartica`.
 
-Kuponi iz aplikacija trgovina (Lidl Plus, Kaufland Card XTRA i sl.) nisu javni, pa
-ih korisnik dodaje u aplikaciji ručno ili sa snimke zaslona.
+Eurospin dio tjednih akcija ne upisuje u službeni cjenik (npr. 9. 11. 2026. trajno mlijeko
+3,5% 1 l: cjenik 1,09 €, akcija 0,65 €). Te akcije skripta preuzima sa stranice
+https://www.eurospin.hr/akcija/ i povezuje s cjenikom po šifri iz naziva slike proizvoda.
+
+**Plodine Card** ponude i kupone Plodine objavljuju samo kao slike
+(https://www.plodine.hr/akcije/218/plodine-card-ponude-i-kuponi). Postupak u dva koraka:
+
+1. `--plodine-pripremi MAPA --prethodni stari_katalog.json` preuzme popis kupona, skine slike
+   koje još nisu pročitane i složi ih po 6 na pregledne listove (`list_N.jpg`).
+2. Netko s modelom za slike (dnevni zadatak) zapiše `MAPA/ocitano.json`:
+   `[{"broj": 1, "stara": 1549, "nova": 1299, "posto": 16, "uvjet": "kupon" | "ponuda"}]`
+   (cijene u centima; `stara`/`nova` su `null` kad kupon ima samo postotak).
+3. `--plodine MAPA` u glavnom pokretanju poveže kupone s cjenikom: marka mora biti ista riječ,
+   vrsta proizvoda i količina moraju se poklopiti, a redovna cijena s kupona smije se od cjenika
+   razlikovati najviše 4%. Pročitane slike spremaju se u `plodineSlike` u katalogu, pa se
+   sljedeći dan čitaju samo nove.
+
+**Grad bez poslovnice lanca** (npr. Studenac objavljuje cjenike samo za 20 supermarketa,
+nijedan u Zagrebu): uzimaju se poslovnice iz istog poštanskog područja, a ako ih nema, iz iste
+regije (obala ili kontinent), prema poštanskim brojevima iz poslovnica svih lanaca.
+
+Ostale trgovine (stanje 9. 11. 2026.): Lidl Plus, Spar, Studenac (Moj Studenac) i dio
+Konzuma (MultiPlus BONUS, „Kupon po tvom” s povratom u BONUS eurima) imaju osobne kupone
+samo u aplikaciji; aplikacija ih čita sa snimki zaslona (i duge snimke, izrezane na dijelove).
 
 ## Ručno pokretanje
 
