@@ -16,6 +16,11 @@ Popis kupnje koji za svaki proizvod pokaže u kojoj je trgovini najjeftiniji.
 3. Cijene se osvježavaju jednom dnevno: zakazani zadatak pokrene skriptu (s gradom
    iz dokumenta `kosarica/glavna`) i ponovno objavi `katalog.json` uz aplikaciju.
 
+Konzumove cijene uz MultiPlusCard nisu u službenim cjenicima, ali ih Konzum javno
+prikazuje na stranici https://www.konzum.hr/web/posebne-ponude (robots.txt je
+dopušta). Skripta ih preuzima jednu stranicu u sekundi i povezuje s cjenikom po
+Konzumovoj šifri proizvoda; isključuje se s `--bez-kartica`.
+
 Kuponi iz aplikacija trgovina (Lidl Plus, Kaufland Card XTRA i sl.) nisu javni, pa
 ih korisnik dodaje u aplikaciji ručno ili sa snimke zaslona.
 
@@ -28,4 +33,4 @@ python3 osvjezi_cijene.py --zip arhiva.zip --datum 2026-11-09
 ```
 
 Skripta koristi samo standardnu Python biblioteku (Python 3.9+). Arhiva ima oko
-150 MB i obrada traje manje od minute.
+150 MB; obrada s preuzimanjem MultiPlusCard cijena traje oko 3 minute.

@@ -94,6 +94,10 @@ p { margin: 0; }
 .badge.sale { background: var(--sale); color: #fff; }
 .badge.coupon { background: var(--coupon-soft); color: var(--coupon); border: 1px dashed var(--coupon); }
 .badge.example { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.badge.cardb { background: transparent; color: var(--sale); border: 1px solid var(--sale); }
+.stores .cardrow { padding: 0 14px 12px 48px; margin-top: -4px; }
+.stores .cardrow label { padding: 0; gap: 10px; font-size: var(--step--1); }
+.stores .cardrow input[type="checkbox"] { width: 18px; height: 18px; }
 .badge.onlist { background: var(--save-soft); color: var(--save); }
 .badge.expired { background: transparent; color: var(--muted); border: 1px solid var(--line); text-decoration: line-through; }
 
@@ -264,6 +268,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   // ---------- Stanje ----------
   let katalog = null;          // {datum, grad, lanci, gradovi, proizvodi}
   let byCode = new Map();      // kod -> red iz kataloga
+  let cardPrices = new Map();  // lanac -> {naziv, cijene: Map(kod -> [centi, vrijediDo])}
   let folded = null;           // nazivi bez dijakritika, za pretragu
   let katalogError = "";
   let state = defaultState();
@@ -306,10 +311,18 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   }
 
   // Cijena proizvoda u lancu: {cijena, redovna|null} u centima, ili null.
+  function hasCard(code) { return !state.kartice || state.kartice[code] !== false; }
   function priceOf(row, chainIdx) {
     const p = row[2][chainIdx];
     if (p == null) return null;
-    return Array.isArray(p) ? { cijena: p[0], redovna: p[1] } : { cijena: p, redovna: null };
+    const base = Array.isArray(p) ? { cijena: p[0], redovna: p[1] } : { cijena: p, redovna: null };
+    const code = katalog.lanci[chainIdx].kod;
+    const card = cardPrices.get(code);
+    const c = card && hasCard(code) ? card.cijene.get(row[0]) : null;
+    if (c && (!c[1] || c[1] >= todayIso()) && c[0] < base.cijena) {
+      return { cijena: c[0], redovna: base.redovna || base.cijena, kartica: card.naziv };
+    }
+    return base;
   }
 
   // ---------- Kuponi ----------
@@ -496,6 +509,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
       }
       katalog = JSON.parse(text);
       byCode = new Map(katalog.proizvodi.map((r) => [r[0], r]));
+      cardPrices = new Map((katalog.kartice || []).map((k) => [k.lanac, { naziv: k.naziv, cijene: new Map(Object.entries(k.cijene || {})) }]));
       const label = katalog.grad ? `poslovnice u gradu ${katalog.grad}` : "cijela Hrvatska";
       $("#dataline").textContent = `Cijene iz službenih cjenika od ${fmtDate(katalog.datum)} · ${label}`;
     } catch (e) {
@@ -601,7 +615,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   function offerBadges(o) {
     let b = "";
     if (o.kupon) b += `<span class="badge coupon">Kupon ${esc(couponLabel(o.kupon))}</span>`;
-    if (o.redovna) b += `<span class="badge sale">Akcija</span>`;
+    if (o.kartica) b += `<span class="badge cardb">Uz ${esc(o.kartica)}</span>`;
+    else if (o.redovna) b += `<span class="badge sale">Akcija</span>`;
     return b;
   }
 
@@ -706,7 +721,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
         <div class="grow wraptext">${esc(r[1])}</div>
         <button class="btn small primary" data-act="add" data-code="${esc(r[0])}" aria-label="Dodaj ${esc(r[1])}">Dodaj</button>
         <div class="meta">
-          ${best ? `<span class="small">od <strong class="num">${esc(eur(best.cijena))}</strong> u trgovini ${esc(chainName(best.lanac))}</span>${best.kupon ? ` <span class="badge coupon">Kupon ${esc(couponLabel(best.kupon))}</span>` : best.redovna ? ` <span class="badge sale">Akcija</span>` : ""}` : `<span class="small muted">Nema u tvojim trgovinama</span>`}
+          ${best ? `<span class="small">od <strong class="num">${esc(eur(best.cijena))}</strong> u trgovini ${esc(chainName(best.lanac))}</span>${best.kupon ? ` <span class="badge coupon">Kupon ${esc(couponLabel(best.kupon))}</span>` : best.kartica ? ` <span class="badge cardb">Uz ${esc(best.kartica)}</span>` : best.redovna ? ` <span class="badge sale">Akcija</span>` : ""}` : `<span class="small muted">Nema u tvojim trgovinama</span>`}
           <span class="small muted">· ${count} ${plural(count, "lanac", "lanca", "lanaca")}</span>
         </div>
       </li>`;
@@ -859,10 +874,16 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     const cityOpts = (katalog.gradovi || []).map(([g, n]) => `<option value="${esc(g)}" ${g === state.grad ? "selected" : ""}>${esc(g)} (${n} ${plural(n, "trgovina", "trgovine", "trgovina")})</option>`).join("");
     return `<section class="section"><h2>Moje trgovine</h2>
       <p class="muted small">Označi trgovine u kojima kupuješ ili čije aplikacije imaš. Usporedba gleda samo njih.</p>
-      <ul class="card stores">${chains().map((c) => `<li><label>
+      <ul class="card stores">${chains().map((c) => {
+        const card = cardPrices.get(c.kod);
+        return `<li><label>
         <input type="checkbox" data-chain="${c.kod}" ${sel.includes(c.kod) ? "checked" : ""} ${c.poslovnica ? "" : "disabled"}>
         <span class="grow"><strong>${esc(c.naziv)}</strong><br><span class="small muted">${c.poslovnica ? `${c.poslovnica} ${plural(c.poslovnica, "poslovnica", "poslovnice", "poslovnica")} · ${(c.proizvoda || 0).toLocaleString("hr-HR")} proizvoda` : "Nema cjenika"}${c.cijelaHrvatska ? `<br>U gradu ${esc(katalog.grad)} nema poslovnica u cjenicima, pa su prikazane najčešće cijene u Hrvatskoj.` : ""}</span></span>
-      </label></li>`).join("")}</ul>
+      </label>${card && sel.includes(c.kod) ? `<div class="cardrow"><label>
+        <input type="checkbox" data-card="${c.kod}" ${hasCard(c.kod) ? "checked" : ""}>
+        <span>Imam ${esc(card.naziv)} <span class="muted">· ${card.cijene.size.toLocaleString("hr-HR")} nižih cijena uz karticu</span></span>
+      </label></div>` : ""}</li>`;
+      }).join("")}</ul>
       <h2>Moj grad</h2>
       <p class="muted small">Cijene se razlikuju od poslovnice do poslovnice. Trenutno je prikazana najčešća cijena svakog lanca za ${katalog.grad ? `grad ${esc(katalog.grad)}` : "cijelu Hrvatsku"}. Kad odabereš grad, cijene za njega stižu sa sljedećim dnevnim osvježavanjem.</p>
       <div class="field"><label for="grad">Grad</label><select id="grad"><option value="">Cijela Hrvatska</option>${cityOpts}</select></div>
@@ -872,6 +893,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
           <li>Od svibnja 2025. trgovci u Hrvatskoj moraju svaki dan objaviti cjenike svih poslovnica (Odluka, NN 75/2025). Podatke skuplja javni servis cijene.dev.</li>
           <li>Aplikacija koristi cjenike od ${esc(fmtDate(katalog.datum))}. Cijene se osvježavaju jednom dnevno.</li>
           <li>Akcijske cijene iz cjenika su uračunate. Kuponi iz aplikacija trgovina nisu javni, pa ih dodaješ u kartici Kuponi.</li>
+          <li>Konzumove cijene uz MultiPlusCard nisu u službenim cjenicima. Aplikacija ih svaki dan preuzima s Konzumove stranice „Posebne ponude”, gdje su javno objavljene.</li>
           <li>Cijena lanca je najčešća cijena među njegovim poslovnicama, pa se u pojedinoj poslovnici može malo razlikovati.</li>
         </ul>
       </details>
@@ -1022,7 +1044,11 @@ Ako na slici nema kupona, vrati [].`;
 
   document.addEventListener("change", (ev) => {
     const t = ev.target;
-    if (t.dataset.chain) {
+    if (t.dataset.card) {
+      state.kartice = Object.assign({}, state.kartice, { [t.dataset.card]: t.checked });
+      const name = cardPrices.get(t.dataset.card)?.naziv || "kartica";
+      commit(t.checked ? `Cijene uz ${name} su uračunate.` : `Cijene uz ${name} se više ne računaju.`);
+    } else if (t.dataset.chain) {
       const sel = new Set(selectedChains());
       t.checked ? sel.add(t.dataset.chain) : sel.delete(t.dataset.chain);
       state.trgovine = chains().map((c) => c.kod).filter((c) => sel.has(c));

@@ -21,9 +21,11 @@ import csv
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
+import time
 import unicodedata
 import urllib.request
 import zipfile
@@ -31,6 +33,8 @@ from collections import Counter, defaultdict
 from datetime import date
 
 ARCHIVE_LIST = "https://api.cijene.dev/v0/list"
+KONZUM_OFFERS = "https://www.konzum.hr/web/posebne-ponude?page={page}&per_page=100"
+USER_AGENT = "PametnaKosarica/1.0 (osobna usporedba cijena; github.com/Prta/tvos-resources)"
 
 # Redoslijed je bitan: aplikacija cijene čita po indeksu lanca.
 CHAINS = [
@@ -102,6 +106,39 @@ def download(url: str) -> str:
     return tmp.name
 
 
+def fetch_konzum_card_prices(delay: float = 1.0, max_pages: int = 60) -> dict:
+    """MultiPlusCard cijene s Konzumove stranice "Posebne ponude".
+
+    Službeni cjenici ne sadrže cijene uz karticu vjernosti, ali ih Konzum javno
+    prikazuje uz proizvode na akciji. Vraća {konzum_product_id: (centi, "GGGG-MM-DD" ili "")}.
+    """
+    found = {}
+    for page in range(1, max_pages + 1):
+        req = urllib.request.Request(KONZUM_OFFERS.format(page=page), headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            text = resp.read().decode("utf-8", "replace")
+        tiles = text.split('<article class="product-item')[1:]
+        new = 0
+        for tile in tiles:
+            pid = re.search(r'data-ga-id="([^"]+)"', tile)
+            card = re.search(r'MultiPlusCard cijena:\s*<strong>\s*([\d.,]+)\s*€', tile)
+            if not pid or not card or pid.group(1) in found:
+                continue
+            amount = card.group(1)
+            if "," in amount:
+                amount = amount.replace(".", "")
+            until = re.search(r'Vrijedi do:\s*<strong>\s*(\d{1,2})\.(\d{1,2})\.(\d{4})', tile)
+            until_iso = f"{until.group(3)}-{int(until.group(2)):02d}-{int(until.group(1)):02d}" if until else ""
+            price = cents(amount)
+            if price:
+                found[pid.group(1)] = (price, until_iso)
+                new += 1
+        if not tiles or (new == 0 and page > 1 and not any("MultiPlusCard cijena" in t for t in tiles)):
+            break
+        time.sleep(delay)  # pristojan razmak između zahtjeva
+    return found
+
+
 def process_chain(archive: zipfile.ZipFile, chain: str, city: str | None):
     stores = {}
     for row in open_csv(archive, f"{chain}/stores.csv"):
@@ -164,7 +201,7 @@ def process_chain(archive: zipfile.ZipFile, chain: str, city: str | None):
     return len(stores), result, cities, national
 
 
-def build(zip_path: str, archive_date: str, city: str | None) -> dict:
+def build(zip_path: str, archive_date: str, city: str | None, konzum_card: dict | None = None) -> dict:
     archive = zipfile.ZipFile(zip_path)
     names = set(archive.namelist())
     merged = defaultdict(dict)
@@ -186,6 +223,23 @@ def build(zip_path: str, archive_date: str, city: str | None) -> dict:
             merged[key][idx] = entry
             infos[key][code] = info
         print(f"{label}: {store_count} poslovnica, {len(prices)} proizvoda", file=sys.stderr)
+
+    cards = []
+    if konzum_card and "konzum/products.csv" in names:
+        idx = [c for c, _ in CHAINS].index("konzum")
+        id_to_key = {row["product_id"]: product_key("konzum", row["product_id"], row.get("barcode", ""))
+                     for row in open_csv(archive, "konzum/products.csv")}
+        card_prices = {}
+        for pid, (price, until) in konzum_card.items():
+            key = id_to_key.get(pid)
+            current = merged.get(key, {}).get(idx) if key else None
+            if current is None:
+                continue
+            final = current[0] if isinstance(current, list) else current
+            if price < final:
+                card_prices[key] = [price, until]
+        cards.append({"lanac": "konzum", "naziv": "MultiPlusCard", "cijene": card_prices})
+        print(f"Konzum MultiPlusCard: {len(konzum_card)} cijena na stranici, {len(card_prices)} povezano s cjenikom", file=sys.stderr)
 
     rows = []
     for key, by_chain in merged.items():
@@ -214,6 +268,7 @@ def build(zip_path: str, archive_date: str, city: str | None) -> dict:
         "grad": city or "",
         "lanci": chain_meta,
         "gradovi": cities,
+        "kartice": cards,
         "proizvodi": rows,
     }
 
@@ -224,7 +279,15 @@ def main() -> None:
     parser.add_argument("--datum", help="datum arhive kad se koristi --zip (GGGG-MM-DD)")
     parser.add_argument("--grad", help="samo poslovnice u ovom gradu, npr. Zagreb")
     parser.add_argument("--izlaz", default="katalog.json", help="izlazna datoteka")
+    parser.add_argument("--bez-kartica", action="store_true", help="ne preuzimaj cijene uz kartice vjernosti")
     args = parser.parse_args()
+
+    konzum_card = None
+    if not args.bez_kartica:
+        try:
+            konzum_card = fetch_konzum_card_prices()
+        except Exception as exc:  # stranica trgovine nije obvezna, cjenici rade i bez nje
+            print(f"Upozorenje: MultiPlusCard cijene nisu preuzete ({exc})", file=sys.stderr)
 
     downloaded = None
     if args.zip:
@@ -235,7 +298,7 @@ def main() -> None:
         zip_path = downloaded = download(url)
 
     try:
-        data = build(zip_path, archive_date, args.grad)
+        data = build(zip_path, archive_date, args.grad, konzum_card)
     finally:
         if downloaded:
             os.unlink(downloaded)  # arhiva ima oko 150 MB, ne ostavljaj je na disku
