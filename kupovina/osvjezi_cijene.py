@@ -284,6 +284,18 @@ def parse_quantity(text: str, anywhere: bool = False):
     return (value * 1000, "g") if unit == "kg" else (value * 1000, "ml") if unit == "l" else (value, unit)
 
 
+def is_sold_by_weight(info: dict, name: str) -> bool:
+    """Roba na vagu: jedinica kg, količina 1 kg ili prazna, a naziv nema količinu."""
+    unit = fold(info.get("unit") or "").replace(" ", "")
+    if unit not in ("kg", "1kg") or parse_quantity(name, anywhere=True):
+        return False
+    qty = fold(info.get("quantity") or "").replace(" ", "").replace(",", ".").replace("kg", "")
+    try:
+        return qty == "" or abs(float(qty) - 1) < 1e-6
+    except ValueError:
+        return False
+
+
 def html_unescape(value: str) -> str:
     import html
     return html.unescape(value)
@@ -547,18 +559,30 @@ def build(zip_path: str, archive_date: str, city: str | None, card_sources: dict
             print(f"Upozorenje: Plodine Card kuponi nisu obrađeni ({exc})", file=sys.stderr)
 
     rows = []
+    brands, brand_index = [], {}
+    junk_brands = {"", "#", "-", "no brand", "nobrand", "n/a", "ostalo", "razno", "vlastite potrebe"}
     for key, by_chain in merged.items():
         info_by_chain = infos[key]
         source = next(c for c in NAME_PREFERENCE + [c for c, _ in CHAINS] if c in info_by_chain)
         info = info_by_chain[source]
         name = tidy_name(info.get("name", ""))
+        if is_sold_by_weight(info, name):
+            name = re.sub(r"\s+kg$", "", name, flags=re.I) + " /kg"  # na vagu: cijena je po kilogramu (npr. svježe banane)
         brand = " ".join((info.get("brand") or "").split())
         if brand and fold(brand) not in fold(name):
             name = f"{name} ({tidy_name(brand)})"
         prices = [by_chain.get(i) for i in range(len(CHAINS))]
         while prices and prices[-1] is None:
             prices.pop()
-        rows.append([key, name, prices])
+        row = [key, name, prices]
+        # Marka (proizvođač) za grupiranje u aplikaciji: indeks u popisu "marke".
+        nice = tidy_name(brand) if brand and fold(brand) not in junk_brands else ""
+        if nice:
+            if nice not in brand_index:
+                brand_index[nice] = len(brands)
+                brands.append(nice)
+            row.append(brand_index[nice])
+        rows.append(row)
 
     # Proizvodi koje prodaje više lanaca prvi, jer se njih najviše isplati uspoređivati.
     rows.sort(key=lambda r: (-sum(p is not None for p in r[2]), fold(r[1])))
@@ -575,6 +599,7 @@ def build(zip_path: str, archive_date: str, city: str | None, card_sources: dict
         "gradovi": cities,
         "kartice": cards,
         "plodineSlike": plodine_cache,  # već pročitane slike kupona, da se sutra ne čitaju opet
+        "marke": brands,
         "proizvodi": rows,
     }
 
