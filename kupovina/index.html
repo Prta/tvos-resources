@@ -283,6 +283,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
 .line .goto { background: none; border: 0; padding: 0; text-align: left; font-weight: 700; min-height: 32px; overflow-wrap: anywhere; }
 .line.done .goto, .line.done .what-line { text-decoration: line-through; color: var(--muted); }
 .line.miss { grid-template-columns: 1fr auto; }
+.lines .aisle { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; color: var(--muted); padding: 14px 0 4px; border-bottom: 1px solid var(--line); }
+.lines .aisle:first-child { padding-top: 6px; }
 .compare li.partial { color: var(--muted); }
 details.fold > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; min-height: 44px; font-family: var(--font-display); font-weight: 700; font-size: var(--step-1); }
 details.fold > summary::-webkit-details-marker { display: none; }
@@ -1085,7 +1087,7 @@ details.fold[open] > summary::after { content: "▴"; }
       const o = r.sorted.find((x) => set.has(x.lanac)) || null;
       if (!o) missing++;
       else { total += o.ukupno; if (o.zamjena) subs++; }
-      return { item: r.item, best: o, anywhere: r.sorted[0] || null };
+      return { item: r.item, best: o, anywhere: r.sorted[0] || null, offers: r.sorted };
     });
     return { set, rows, total, missing, subs };
   }
@@ -1099,7 +1101,7 @@ details.fold[open] > summary::after { content: "▴"; }
   function planOptions(plan) {
     const sel = selectedChains();
     const all = { n: "sve", ...planFor(plan, new Set(sel)) };
-    all.rows = plan.perItem.map((r) => ({ item: r.item, best: r.best, anywhere: r.sorted[0] || null }));
+    all.rows = plan.perItem.map((r) => ({ item: r.item, best: r.best, anywhere: r.sorted[0] || null, offers: r.sorted }));
     all.set = new Set(plan.perItem.filter((r) => r.best).map((r) => r.best.lanac));
     const opts = [];
     for (const k of [1, 2, 3]) {
@@ -1130,6 +1132,30 @@ details.fold[open] > summary::after { content: "▴"; }
     }
     return [...m.entries()].map(([code, list]) => ({ code, rows: list, sum: list.reduce((s, r) => s + r.best.ukupno, 0) }))
       .sort((a, b) => b.rows.length - a.rows.length || b.sum - a.sum);
+  }
+  // Odjeli redom kojim se obično prolazi kroz trgovinu; voće i povrće zajedno, smrznuto na kraju da se ne otopi.
+  const AISLES = [["Voće i povrće", ["Voće", "Povrće"]], ["Kruh i peciva"], ["Meso"], ["Riba i plodovi mora"], ["Naresci i kobasice"],
+    ["Mliječni proizvodi i jaja"], ["Tjestenina, riža i brašno"], ["Ulje, umaci i začini"], ["Konzerve i gotova jela"], ["Namazi i paštete"],
+    ["Kava, čaj i kakao"], ["Slatkiši i grickalice"], ["Pića"], ["Za bebe"], ["Kućni ljubimci"], ["Higijena i kozmetika"], ["Čišćenje"],
+    ["Kućanstvo"], ["Smrznuto"]];
+  // Odjel stavke: najčešća vrsta među proizvodima koje stavka uspoređuje (ista u svakoj trgovini).
+  function aisleOf(r) {
+    const vrste = katalog.vrste || [];
+    const count = new Map();
+    const codes = (r.offers && r.offers.length ? r.offers.map((o) => o.kod) : r.best ? [r.best.kod] : []).concat(r.item.kodovi || []);
+    for (const c of codes) {
+      const t = byCode.get(c)?.[4];
+      if (t != null && t >= 0) count.set(t, (count.get(t) || 0) + 1);
+    }
+    const top = [...count.entries()].sort((a, b) => b[1] - a[1])[0];
+    const name = top ? vrste[top[0]] : null;
+    const idx = AISLES.findIndex(([label, members]) => (members || [label]).includes(name));
+    return idx < 0 ? AISLES.length : idx;
+  }
+  function aisleGroups(rows) {
+    const m = new Map();
+    for (const r of rows) { const a = aisleOf(r); if (!m.has(a)) m.set(a, []); m.get(a).push(r); }
+    return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([a, list]) => [a < AISLES.length ? AISLES[a][0] : "Ostalo", list]);
   }
   const andList = (xs) => xs.length > 1 ? `${xs.slice(0, -1).join(", ")} i ${xs[xs.length - 1]}` : xs.join("");
   function cityNote(code) {
@@ -1211,10 +1237,10 @@ details.fold[open] > summary::after { content: "▴"; }
       h += `<article class="card stop">
         <div class="stop-head"><span class="stop-name grow">${esc(chainName(s.code))}</span><span class="small muted">${s.rows.length} ${plural(s.rows.length, "proizvod", "proizvoda", "proizvoda")}</span><span class="tag plain">${esc(eur(s.sum))}</span></div>
         ${note ? `<p class="small muted stop-sub" style="padding-top:8px">${esc(note)}</p>` : ""}
-        <ul class="lines">${s.rows.map((r) => lineHtml(r)).join("")}</ul>
+        <ul class="lines">${aisleGroups(s.rows).map(([label, list]) => `<li class="aisle">${esc(label)}</li>${list.map((r) => lineHtml(r)).join("")}`).join("")}</ul>
       </article>`;
     }
-    h += `<p class="small muted">Dodirni naziv za sve cijene i zamjene. Kvačicom označi što si već kupio.</p></section>`;
+    h += `<p class="small muted">Popis je složen po odjelima trgovine. Dodirni naziv za sve cijene i zamjene, a kvačicom označi što si već kupio.</p></section>`;
     h += compareHtml(plan, cur);
     return h;
   }
