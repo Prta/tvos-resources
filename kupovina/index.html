@@ -463,6 +463,8 @@ details.fold[open] > summary::after { content: "▴"; }
     return state.stavke.filter((s) => s.id === k.stavka || (k.kodovi || []).some((c) => itemCovers(s, c)));
   }
   function couponOnList(k) { return couponItems(k).length > 0; }
+  // Kauflandovi XTRA kuponi ne vrijede za proizvode koji su već na akciji ili imaju cijenu uz karticu.
+  function couponFits(k, p) { return !((k.samoRedovne || k.lanac === "kaufland") && (p.redovna || p.kartica)); }
   // Ukupno za količinu, s kuponom ako postoji.
   function totalWithCoupon(unit, qty, k) {
     if (!k) return unit * qty;
@@ -670,7 +672,7 @@ details.fold[open] > summary::after { content: "▴"; }
       const q = g ? g.qByCode.get(kod) || parseQty(row[1]) : null;
       const fits = !g || fitsRef(q, ref);
       const perUnit = q ? Math.round(p.cijena / q.v * (q.dim === "kom" ? 1 : 1000)) : null;
-      for (const k of [null, ...couponsFor(code, kod, item)]) {
+      for (const k of [null, ...couponsFor(code, kod, item).filter((x) => couponFits(x, p))]) {
         const withCoupon = totalWithCoupon(p.cijena, item.kom, k);
         let total = withCoupon, popust = null;
         for (const d of discounts) {
@@ -973,7 +975,7 @@ details.fold[open] > summary::after { content: "▴"; }
       const p = priceOf(row, chainIndex(code));
       if (!p) continue;
       let price = p.cijena, kupon = null;
-      for (const k of couponsFor(code, row[0], null)) {
+      for (const k of couponsFor(code, row[0], null).filter((x) => couponFits(x, p))) {
         const t = totalWithCoupon(p.cijena, 1, k);
         if (t < price) { price = t; kupon = k; }
       }
