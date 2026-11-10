@@ -11,8 +11,10 @@ Popis kupnje koji za svaki proizvod pokaže u kojoj je trgovini najjeftiniji.
    (javni podaci koje trgovci moraju objavljivati po Odluci NN 75/2025) i napravi
    `katalog.json`: za svaki proizvod najčešću cijenu u svakom lancu, s akcijskom
    cijenom kad je proizvod na akciji.
-2. `index.html` je aplikacija. Učita `katalog.json`, a popis, odabrane trgovine,
-   grad i kupone sprema u bazu artefakta (dokument `kosarica/glavna`).
+2. `index.html` je aplikacija. Učita `katalog.json`; odabrane trgovine, grad, kartice,
+   popuste i kupone sprema u bazu artefakta (dokument `kosarica/glavna`), a svaku stavku
+   popisa kao zaseban dokument (`popis/<id>`, s poljem `dodao`), da više ljudi može
+   istodobno upisivati na zajednički popis.
 3. Cijene se osvježavaju jednom dnevno: zakazani zadatak pokrene skriptu (s gradom
    iz dokumenta `kosarica/glavna`) i ponovno objavi `katalog.json` uz aplikaciju.
 

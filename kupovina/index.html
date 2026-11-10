@@ -56,7 +56,7 @@ body {
 body::before {
   content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg);
 }
-button, input, select { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .wrap {
@@ -145,6 +145,9 @@ p { margin: 0; }
 .qty { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; flex: none; }
 .qty button { background: transparent; border: 0; width: 34px; height: 32px; font-size: 1.125rem; font-weight: 600; }
 .qty span { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+.iconbtn { flex: none; width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 1.25rem; line-height: 1; display: grid; place-items: center; }
+.iconbtn:hover { color: var(--sale); border-color: var(--sale); }
+.btn.danger.armed { background: var(--sale); color: #fff; border-color: var(--sale); }
 .prices { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
 .prices li { display: grid; grid-template-columns: 6.5rem 1fr auto; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px dotted var(--line); }
 .prices li.cheapest .store { font-weight: 700; }
@@ -221,7 +224,9 @@ nav.tabs .count { position: absolute; top: 8px; left: calc(50% + 6px); backgroun
   bottom: calc(var(--tabbar-h) + 14px + env(safe-area-inset-bottom, 0px));
   background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 0.9375rem;
   max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+  display: flex; align-items: center; gap: 14px;
 }
+.toast button { background: transparent; border: 0; color: var(--tag); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; padding: 4px 0; white-space: nowrap; }
 .skeleton { height: 14px; border-radius: 4px; background: var(--line); }
 .loading { padding: 18px 16px; display: grid; gap: 10px; }
 .status { font-size: var(--step--1); color: var(--muted); }
@@ -305,11 +310,21 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   const fmtDate = (iso) => { if (!iso) return ""; const [y, m, d] = iso.split("-"); return `${+d}. ${+m}. ${y}.`; };
   const plural = (n, one, few, many) => { const a = n % 10, b = n % 100; return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many; };
 
-  function toast(msg) {
+  function toast(msg, action) {
     const t = $("#toast");
-    t.textContent = msg; t.hidden = false;
+    t.textContent = "";
+    const span = document.createElement("span");
+    span.textContent = msg;
+    t.append(span);
+    if (action) {
+      const b = document.createElement("button");
+      b.dataset.act = action.act;
+      b.textContent = action.label;
+      t.append(b);
+    }
+    t.hidden = false;
     clearTimeout(toast.timer);
-    toast.timer = setTimeout(() => { t.hidden = true; }, 2600);
+    toast.timer = setTimeout(() => { t.hidden = true; }, action ? 7000 : 2600);
   }
 
   function chains() { return katalog ? katalog.lanci : []; }
@@ -561,29 +576,69 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   function saveLocal() {
     try { localStorage.setItem(LOCAL_KEY, JSON.stringify(state)); } catch (e) {}
   }
-  function commit(msg) {
+  // Postavke i kuponi su jedan dokument (kosarica/glavna), a svaka stavka popisa svoj dokument
+  // (popis/<id>), da više ljudi može istodobno dodavati i brisati stavke bez prebrisivanja.
+  const ITEMS_PATH = "popis";
+  let itemsCol = null, syncReady = false, syncedItems = new Map(), syncedMain = null;
+  let lastItemsSnap = null, lastMainSnap = null;
+  const stable = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && !Array.isArray(x)
+    ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x));
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+  function mainPart() { const { stavke, ...rest } = state; return plain(rest); }
+  function sortItems(list) { return list.sort((a, b) => (a.vrijeme || 0) - (b.vrijeme || 0) || String(a.id).localeCompare(String(b.id))); }
+  function itemsFrom(snap) { return sortItems(snap.docs.filter((d) => d.exists).map((d) => ({ ...plain(d.data()), id: d.id }))); }
+
+  function commit(msg, action) {
     dirty = true;
     saveLocal();
     render();
-    if (msg) toast(msg);
+    if (msg) toast(msg, action);
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(flush, 500);
+    saveTimer = setTimeout(flush, 400);
   }
   async function flush() {
-    if (!docRef || saving) return;
+    if (!docRef || !syncReady || saving) return;
     saving = true;
     try {
       while (dirty) {
         dirty = false;
-        await docRef.set(JSON.parse(JSON.stringify(state)));
+        const wanted = new Map(state.stavke.map((it) => [it.id, plain(it)]));
+        for (const [id, obj] of wanted) {
+          const json = stable(obj);
+          if (syncedItems.get(id) !== json) { await itemsCol.doc(id).set(obj); syncedItems.set(id, json); }
+        }
+        for (const id of [...syncedItems.keys()]) {
+          if (!wanted.has(id)) { await itemsCol.doc(id).delete(); syncedItems.delete(id); }
+        }
+        const main = mainPart(), mainJson = stable(main);
+        if (mainJson !== syncedMain) { await docRef.set(main); syncedMain = mainJson; }
       }
       setDbStatus("saved");
     } catch (e) {
       setDbStatus(e && e.code === "invalid_argument" ? "readonly" : "error");
     } finally {
       saving = false;
+      // Promjene drugih koje su stigle dok smo spremali.
+      if (lastMainSnap) applyMainSnap(lastMainSnap);
+      if (lastItemsSnap) applyItemsSnap(lastItemsSnap);
     }
   }
+  function applyItemsSnap(snap) {
+    lastItemsSnap = snap;
+    if (dirty || saving) return;
+    const remote = itemsFrom(snap);
+    syncedItems = new Map(remote.map((it) => [it.id, stable(it)]));
+    if (stable(remote) !== stable(state.stavke)) { state.stavke = remote; saveLocal(); render(); }
+  }
+  function applyMainSnap(snap) {
+    lastMainSnap = snap;
+    if (dirty || saving || !snap.exists) return;
+    const data = plain(snap.data());
+    delete data.stavke;
+    syncedMain = stable(data);
+    if (syncedMain !== stable(mainPart())) { state = Object.assign(defaultState(), data, { stavke: state.stavke }); saveLocal(); render(); }
+  }
+
   function setDbStatus(s) { dbStatus = s; const el = $("#savestate"); if (el) el.replaceWith(saveStateEl()); }
   function saveStateEl() {
     const span = document.createElement("span");
@@ -594,7 +649,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
       saved: "Popis je spremljen i vidiš ga na svakom uređaju.",
       slow: "Spremanje se još ne javlja. Promjene se zasad čuvaju na ovom uređaju.",
       error: "Spremanje trenutno ne radi. Promjene se zasad čuvaju na ovom uređaju.",
-      readonly: "Ovaj popis možeš samo gledati.",
+      readonly: "Ovaj popis možeš samo gledati. Za upisivanje te vlasnik treba pozvati s pravom uređivanja.",
     };
     span.textContent = map[dbStatus] || "";
     span.className = "status" + (dbStatus === "error" || dbStatus === "slow" ? " warn" : "");
@@ -604,26 +659,74 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   async function connectDb() {
     if (!window.claude || typeof window.claude.use !== "function") { setDbStatus("local"); return; }
     setDbStatus("connecting");
-    let slowTimer = setTimeout(() => setDbStatus("slow"), 10000);
+    const slowTimer = setTimeout(() => setDbStatus("slow"), 10000);
     try { db = await window.claude.use("db"); } catch (e) { db = null; }
     if (!db) { clearTimeout(slowTimer); setDbStatus("local"); return; }
+    connectUser();
     docRef = db.doc(DOC_PATH);
-    let first = true;
-    docRef.onSnapshot((snap) => {
-      if (!snap.metadata.fromCache) { clearTimeout(slowTimer); if (dbStatus !== "error") setDbStatus("saved"); }
-      if (snap.exists) {
-        const data = snap.data();
-        if (!dirty && !saving && JSON.stringify(data) !== JSON.stringify(state)) {
-          state = Object.assign(defaultState(), JSON.parse(JSON.stringify(data)));
-          saveLocal();
-          render();
-        }
-      } else if (first && !snap.metadata.fromCache && (state.stavke.length || state.kuponi.length || state.trgovine)) {
-        dirty = true; flush();   // prvi put: prenesi popis s ovog uređaja
+    itemsCol = db.collection(ITEMS_PATH);
+    let mainSnap = null, itemsSnap = null;
+    const settle = () => {
+      if (syncReady || !mainSnap || !itemsSnap) return;
+      syncReady = true;
+      clearTimeout(slowTimer);
+      if (dbStatus !== "error") setDbStatus("saved");
+      const data = mainSnap.exists ? plain(mainSnap.data()) : null;
+      const legacy = data && Array.isArray(data.stavke) ? data.stavke : null;
+      const remote = itemsFrom(itemsSnap);
+      syncedItems = new Map(remote.map((it) => [it.id, stable(it)]));
+      if (data) {
+        delete data.stavke;
+        state = Object.assign(defaultState(), data, { stavke: state.stavke });
+        syncedMain = legacy ? null : stable(data);   // stari oblik: dokument treba prepisati bez stavki
       }
-      if (!snap.metadata.fromCache) first = false;
-    }, (err) => { clearTimeout(slowTimer); setDbStatus("error"); });
+      if (!remote.length && (legacy || !data)) {
+        // Prvi put u novom obliku: stavke iz starog dokumenta (ili s ovog uređaja) postaju zasebni zapisi.
+        const t0 = Date.now();
+        state.stavke = (legacy || state.stavke).map((it, n) => ({ ...it, vrijeme: it.vrijeme || t0 + n }));
+        if (state.stavke.length || !data || legacy) dirty = true;
+      } else {
+        state.stavke = remote;
+        if (!data || legacy) dirty = true;
+      }
+      saveLocal();
+      render();
+      if (dirty) flush();
+    };
+    const onErr = () => { clearTimeout(slowTimer); setDbStatus("error"); };
+    docRef.onSnapshot((snap) => {
+      if (!syncReady) { if (!snap.metadata.fromCache) { mainSnap = snap; settle(); } return; }
+      applyMainSnap(snap);
+    }, onErr);
+    itemsCol.onSnapshot((snap) => {
+      if (!syncReady) { if (!snap.metadata.fromCache) { itemsSnap = snap; settle(); } return; }
+      applyItemsSnap(snap);
+    }, onErr);
   }
+
+  // Tko je dodao stavku (na zajedničkom popisu). Spremaju se samo id-jevi, imena se čitaju pri prikazu.
+  let userCap = null, myId = null;
+  const people = {};
+  async function connectUser() {
+    try { userCap = await window.claude.use("user"); } catch (e) { userCap = null; }
+    if (!userCap) return;
+    try { myId = await userCap.id(); } catch (e) { myId = null; }
+    render();
+  }
+  async function refreshPeople() {
+    if (!userCap) return;
+    const ids = [...new Set(state.stavke.map((it) => it.dodao).filter((x) => x && x !== myId))];
+    if (!ids.length) return;
+    let ps = {};
+    try { ps = await userCap.profiles(ids); } catch (e) { return; }
+    let changed = false;
+    for (const id of ids) {
+      const nm = (ps[id] && ps[id].name) || "";
+      if (people[id] !== nm) { people[id] = nm; changed = true; }
+    }
+    if (changed) render();
+  }
+  function newItem(fields) { return { id: uid(), kom: 1, vrijeme: Date.now(), ...(myId ? { dodao: myId } : {}), ...fields }; }
 
   async function connectSample() {
     if (!window.claude || typeof window.claude.use !== "function") return;
@@ -721,6 +824,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
 
   // ---------- Prikaz ----------
   function render() {
+    refreshPeople();
     document.querySelectorAll("nav.tabs button").forEach((b) => {
       b.setAttribute("aria-selected", String(b.dataset.tab === tab));
     });
@@ -888,7 +992,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
       <div id="results">${searchText.trim().length >= 2 ? resultsHtml() : ""}</div>
     </section>`;
 
-    h += `<section class="section" aria-label="Moj popis"><div class="row"><h2 class="grow">Moj popis</h2><span class="small muted">${state.stavke.length} ${plural(state.stavke.length, "stavka", "stavke", "stavki")}</span></div>`;
+    h += `<section class="section" aria-label="Moj popis"><div class="row" style="flex-wrap:wrap"><h2 class="grow">Moj popis</h2><span class="small muted">${state.stavke.length} ${plural(state.stavke.length, "stavka", "stavke", "stavki")}</span>${state.stavke.length ? `<button class="btn small danger" data-act="del-all">Obriši sve</button>` : ""}</div>`;
     if (classifying) {
       h += `<div class="notice"><div class="row"><span class="status grow">${esc(classifying.text)} Traje do pola minute.</span><button class="btn small" data-act="stop-classify">Zaustavi</button></div></div>`;
     } else if (sample && unchecked().length) {
@@ -948,7 +1052,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
           <span class="num">${item.kom}</span>
           <button data-act="qty" data-id="${item.id}" data-d="1" aria-label="Više">+</button>
         </div>
+        <button class="iconbtn" data-act="del" data-id="${item.id}" aria-label="Obriši ${esc(item.naziv)}" title="Obriši">×</button>
       </div>
+      ${item.dodao && myId && item.dodao !== myId ? `<div class="small muted">Dodano: ${esc(people[item.dodao] || "netko drugi")}</div>` : ""}
       <div class="row"><button class="linkbtn" data-act="toggle" data-id="${item.id}" aria-expanded="${open}">${open ? "Sakrij cijene" : `Cijene u ${offers.length} ${plural(offers.length, "trgovini", "trgovine", "trgovina")}`}</button></div>`;
     if (open) {
       h += `<ul class="prices">${offers.map((o, i) => `<li class="${i === 0 ? "cheapest" : ""}">
@@ -983,7 +1089,6 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
       h += `<div class="row" style="flex-wrap:wrap">
         ${item.upit ? (sample ? `<button class="btn small" data-act="reclassify" data-id="${item.id}" ${classifying ? "disabled" : ""}>Provjeri ponovno</button>` : "") : `<button class="btn small" data-act="alt" data-id="${item.id}">Dodaj zamjensku marku</button>`}
         <button class="btn small" data-act="rename" data-id="${item.id}">${item.upit ? "Promijeni" : "Preimenuj"}</button>
-        <button class="btn small danger" data-act="del" data-id="${item.id}">Obriši</button>
       </div>
       ${renaming === item.id ? `<form class="row" data-form="rename" data-id="${item.id}"><input id="rename-${item.id}" class="grow" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface)" value="${esc(item.upit || item.naziv)}" aria-label="${item.upit ? "Što tražiš" : "Novi naziv"}"><button class="btn small primary">Spremi</button></form>` : ""}`;
     }
@@ -994,6 +1099,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   let currentPlan = null;
   let openStore = null;   // trgovina čiji je popis otvoren u "Sve u jednoj trgovini"
   let classifying = null; // {ctl, text} dok Claude provjerava opće stavke
+  let lastRemoved = null; // obrisane stavke, za "Vrati"
   let bulkText = "";
 
   function kuponiHtml() {
@@ -1109,6 +1215,16 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
         <span>Imam ${esc(card.naziv)} <span class="muted">· ${card.cijene.size.toLocaleString("hr-HR")} nižih cijena uz karticu${[...card.cijene.values()].some((p) => p.some((x) => x[3] === "kupon")) ? ", dio njih treba aktivirati kao kupon u aplikaciji" : ""}</span></span>
       </label></div>` : ""}</li>`;
       }).join("")}</ul>
+      <h2>Zajednički popis</h2>
+      <div class="notice small">
+        <p>Popis može upisivati više ljudi, svatko sa svog mobitela, a promjene se vide odmah.</p>
+        <ol style="margin:0;padding-left:18px;display:grid;gap:4px">
+          <li>Otvori izbornik za dijeljenje ove aplikacije (<strong>Share</strong>).</li>
+          <li>Pozovi ukućane njihovom e-mail adresom, s pravom uređivanja (<strong>Editor</strong>).</li>
+          <li>Ne uključuj javnu poveznicu: dok je uključena, pozvani mogu samo gledati.</li>
+        </ol>
+        <p class="muted">Svatko treba Claude račun. Trgovine, grad, kartice i kuponi su zajednički za sve na popisu.</p>
+      </div>
       <h2>Popusti na račun</h2>
       <p class="muted small">Npr. 10% u Konzumu uz Croatia osiguranje, jednom mjesečno. Uključen popust se uračunava u usporedbu, a uključiš ga i isključiš i na početku kartice „Gdje kupiti”.</p>
       ${(state.popusti || []).length ? `<ul class="card stores">${state.popusti.map((d) => `<li><label for="popt-${d.id}">
@@ -1150,7 +1266,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   function addGeneric(text) {
     const upit = String(text || "").replace(/\s+/g, " ").trim().slice(0, 80);
     if (upit.length < 2 || state.stavke.some((s) => s.upit && fold(s.upit) === fold(upit))) return null;
-    const item = { id: uid(), naziv: upit[0].toUpperCase() + upit.slice(1), upit, kom: 1, iskljuceni: [] };
+    const item = newItem({ naziv: upit[0].toUpperCase() + upit.slice(1), upit, iskljuceni: [] });
     state.stavke.push(item);
     return item;
   }
@@ -1245,7 +1361,7 @@ ${body}`, { signal: ctl.signal });
     }
     const existing = state.stavke.find((s) => (s.kodovi || []).includes(code));
     if (existing) { existing.kom += 1; commit(`Već je na popisu, sad ${existing.kom} kom.`); return; }
-    state.stavke.push({ id: uid(), naziv: row[1], kom: 1, kodovi: [code] });
+    state.stavke.push(newItem({ naziv: row[1], kodovi: [code] }));
     commit("Dodano na popis.");
   }
 
@@ -1415,10 +1531,33 @@ Ako na slikama nema kupona, vrati [].`;
       case "rename": renaming = renaming === id ? null : id; render(); $(`#rename-${id}`)?.focus(); break;
       case "del":
         if (item) {
-          if (el.dataset.confirm !== "1") { el.dataset.confirm = "1"; el.textContent = "Sigurno obrisati?"; return; }
+          lastRemoved = [item];
           state.stavke = state.stavke.filter((s) => s.id !== id);
-          state.kuponi = state.kuponi.filter((k) => k.stavka !== id);
-          openItem = null; commit("Obrisano s popisa.");
+          if (openItem === id) openItem = null;
+          commit(`Obrisano: ${item.naziv}`, { label: "Vrati", act: "undo" });
+        }
+        break;
+      case "del-all":
+        // Drugi dodir u 4 sekunde potvrđuje; poslije se još može vratiti.
+        if (el.dataset.confirm !== "1") {
+          el.dataset.confirm = "1";
+          el.classList.add("armed");
+          el.textContent = `Obriši svih ${state.stavke.length}?`;
+          setTimeout(() => { if (el.isConnected) { el.dataset.confirm = ""; el.classList.remove("armed"); el.textContent = "Obriši sve"; } }, 4000);
+          return;
+        }
+        lastRemoved = state.stavke.slice();
+        state.stavke = [];
+        openItem = null;
+        commit(`Popis je obrisan (${lastRemoved.length} ${plural(lastRemoved.length, "stavka", "stavke", "stavki")}).`, { label: "Vrati", act: "undo" });
+        break;
+      case "undo":
+        if (lastRemoved && lastRemoved.length) {
+          const have = new Set(state.stavke.map((s) => s.id));
+          state.stavke = sortItems([...state.stavke, ...lastRemoved.filter((s) => !have.has(s.id))]);
+          lastRemoved = null;
+          $("#toast").hidden = true;
+          commit("Vraćeno.");
         }
         break;
       case "del-coupon": state.kuponi = state.kuponi.filter((k) => k.id !== id); commit("Kupon je obrisan."); break;
@@ -1442,7 +1581,7 @@ Ako na slikama nema kupona, vrati [].`;
         const k = state.kuponi.find((x) => x.id === id);
         const kodovi = k ? (k.kodovi || []).filter((c) => byCode.has(c)) : [];
         if (k && kodovi.length) {
-          state.stavke.push({ id: uid(), naziv: (k.naziv || byCode.get(kodovi[0])[1]).slice(0, 80), kom: k.vrsta === "xy" ? k.x : 1, kodovi });
+          state.stavke.push(newItem({ naziv: (k.naziv || byCode.get(kodovi[0])[1]).slice(0, 80), kom: k.vrsta === "xy" ? k.x : 1, kodovi }));
           commit("Dodano na popis, kupon je uračunat.");
         }
         break;
