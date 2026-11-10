@@ -52,6 +52,12 @@ Ostale trgovine (stanje 9. 11. 2026.): Lidl Plus, Spar, Studenac (Moj Studenac) 
 Konzuma (MultiPlus BONUS, „Kupon po tvom” s povratom u BONUS eurima) imaju osobne kupone
 samo u aplikaciji; aplikacija ih čita sa snimki zaslona (i duge snimke, izrezane na dijelove).
 
+**Količine u nazivima:** Lidl količinu ne piše u nazivu nego u polju `unit` ("7Days Kroasan kakao"
++ "60g"), pa je skripta dopisuje u naziv kad je naziv nema; bez toga se pakiranja ne mogu uspoređivati.
+
+**Zamjene:** kad trgovina nema traženi proizvod (npr. marku koju ne drži), aplikacija pokaže najjeftiniju
+zamjenu iste vrste koju je Claude predložio pri provjeri stavke, označenu kao "Zamjena".
+
 **Vrste proizvoda** (voće, povrće, meso, naresci, mliječni, ...) za biranje po vrsti određuje
 `vrste.py` po riječima u nazivu i zakonskoj kategoriji iz cjenika (cjenici imaju samo šest
 kategorija). Voće i povrće priznaje se samo kad je riječ na početku naziva, jer je drugdje obično

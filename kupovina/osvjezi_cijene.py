@@ -299,6 +299,24 @@ def is_sold_by_weight(info: dict, name: str) -> bool:
         return False
 
 
+def quantity_suffix(info: dict, name: str) -> str:
+    """Količina iz polja "unit" kad je naziv nema (Lidl: "Svježi zrnati sir" + "200g" -> "200 g")."""
+    folded = fold(name).replace(",", ".")
+    if parse_quantity(name, anywhere=True) or re.search(r"\d+\s*/\s*1\b|\d+\s*(kom|kos|r)\b|\d+\s*x\s*\d", folded):
+        return ""
+    unit = fold(info.get("unit") or "").replace(" ", "")
+    num = r"(\d+(?:[.,]\d+)?)"
+    if m := re.fullmatch(r"(\d+)x" + num + r"(g|kg|ml|l)", unit):
+        return f"{m.group(1)}x{m.group(2).replace('.', ',')} {m.group(3)}"
+    if m := re.fullmatch(num + r"(g|kg|ml|l)", unit):
+        return f"{m.group(1).replace('.', ',')} {m.group(2)}"
+    if m := re.fullmatch(r"(\d+)komad", unit):
+        return f"{m.group(1)} kom"
+    if m := re.fullmatch(r"(\d+)x\d+blatt", unit):
+        return f"{m.group(1)}/1"  # role toaletnog papira
+    return ""
+
+
 def html_unescape(value: str) -> str:
     import html
     return html.unescape(value)
@@ -573,6 +591,8 @@ def build(zip_path: str, archive_date: str, city: str | None, card_sources: dict
         name = tidy_name(info.get("name", ""))
         if is_sold_by_weight(info, name):
             name = re.sub(r"\s+kg$", "", name, flags=re.I) + " /kg"  # na vagu: cijena je po kilogramu (npr. svježe banane)
+        elif suffix := quantity_suffix(info, name):
+            name = f"{name} {suffix}"
         brand = " ".join((info.get("brand") or "").split())
         if brand and fold(brand) not in fold(name):
             name = f"{name} ({tidy_name(brand)})"

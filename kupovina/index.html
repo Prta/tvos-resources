@@ -406,11 +406,13 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   function parseQty(name) {
     const t = fold(name).replace(/(\d),(\d)/g, "$1.$2");
     if (/\/\s*kg\b/.test(t)) return { v: 1000, dim: "g", vaga: true };  // na vagu, cijena po kilogramu
-    let m = t.match(/(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|dl|cl|l)\b/);
+    let m = t.match(/\d+\s*l\s*,\s*(\d+)\s*r\b/);  // Eurospin "3S, 150 L, 10R": 10 rola po 150 listova
+    if (m) return +m[1] > 0 ? { v: +m[1], dim: "kom" } : null;
+    m = t.match(/(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|dl|cl|l)\b/);
     let n = 1, v, u;
     if (m) { n = +m[1]; v = +m[2]; u = m[3]; }
     else if ((m = t.match(/(\d+(?:\.\d+)?)\s*(kg|g|ml|dl|cl|l)\b/))) { v = +m[1]; u = m[2]; }
-    else if ((m = t.match(/(\d+)\s*\/\s*1\b/)) || (m = t.match(/(\d+)\s*(?:kom|rola|role)\b/))) return +m[1] > 0 ? { v: +m[1], dim: "kom" } : null;
+    else if ((m = t.match(/(\d+)\s*\/\s*1\b/)) || (m = t.match(/(\d+)\s*(?:kom|rola|role|rol|r)\b/))) return +m[1] > 0 ? { v: +m[1], dim: "kom" } : null;
     else return null;
     const f = { kg: [1000, "g"], g: [1, "g"], l: [1000, "ml"], dl: [100, "ml"], cl: [10, "ml"], ml: [1, "ml"] }[u];
     return v > 0 ? { v: n * v * f[0], dim: f[1] } : null;
@@ -424,6 +426,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     return `${String(Math.round(n * 100) / 100).replace(".", ",")} ${q.dim === "g" ? (big ? "kg" : "g") : (big ? "l" : "ml")}`;
   }
   // Riječi upita bez količine; kratke riječi ("sir") moraju biti cijele, duže se traže po korijenu.
+  const PROVJERA_V = 2;  // verzija Claudeove provjere stavki; starije provjere se nude ponovno
   const FILLER = new Set(["za", "i", "s", "sa", "od", "na", "u", "ili", "the", "and", "of", "with", "for"]);
   // "7days" -> "7 days", da se poklopi s "7 Days kroasan" (samo jedna znamenka i barem tri slova,
   // pa količine poput "500g" i "3sl" ostaju kakve jesu).
@@ -569,14 +572,27 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
       const allowed = allowedFilter(item);
       codes = g.idx.filter((i) => allowed(katalog.proizvodi[i][0], i)).map((i) => katalog.proizvodi[i][0]);
     }
+    const found = scanOffers(item, code, idx, codes, g, ref);
+    if (found || !item.upit) return found;
+    // Trgovina nema traženo (npr. marku koju ne drži): najjeftinija zamjena iste vrste.
+    const sub = scanOffers(item, code, idx, substituteCodes(item), g, ref);
+    return sub ? { ...sub, zamjena: true } : null;
+  }
+  // Zamjene: Claude ih predloži pri provjeri (druga marka iste vrste). Za stavku s ručno odabranim
+  // proizvodima zamjene su i ostali proizvodi koje je provjera prihvatila.
+  function substituteCodes(item) {
+    const skip = new Set([...(item.iskljuceni || []), ...(item.prihvaceni || [])]);
+    return (item.zamjene || []).filter((c) => !skip.has(c));
+  }
+  function scanOffers(item, code, idx, codes, g, ref) {
     const discounts = billDiscounts(code);
-    let best = null, fallback = null;
+    let best = null, fallback = null, unsized = null;
     for (const kod of codes) {
       const row = byCode.get(kod);
       if (!row) continue;
       const p = priceOf(row, idx);
       if (!p) continue;
-      const q = g ? g.qByCode.get(kod) : null;
+      const q = g ? g.qByCode.get(kod) || parseQty(row[1]) : null;
       const fits = !g || fitsRef(q, ref);
       const perUnit = q ? Math.round(p.cijena / q.v * (q.dim === "kom" ? 1 : 1000)) : null;
       for (const k of [null, ...couponsFor(code, kod, item)]) {
@@ -598,13 +614,17 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
           if (!fallback || dist < fallback.dist - 1e-9 || (Math.abs(dist - fallback.dist) < 1e-9 && total < fallback.ukupno)) {
             fallback = { ...offer, drugoPakiranje: true, dist };
           }
+        } else if (!q && (!unsized || total < unsized.ukupno)) {
+          unsized = { ...offer, drugoPakiranje: true };  // cjenik ne navodi količinu
         }
       }
     }
-    return best || fallback;
+    return best || fallback || unsized;
   }
 
-  const byOffer = (a, b) => ((a.drugoPakiranje ? 1 : 0) - (b.drugoPakiranje ? 1 : 0)) || (a.ukupno - b.ukupno);
+  // Redoslijed ponuda: traženi proizvod, pa drugo pakiranje, pa zamjena; unutar toga cijena.
+  const offerRank = (o) => (o.zamjena ? 2 : 0) + (o.drugoPakiranje ? 1 : 0);
+  const byOffer = (a, b) => (offerRank(a) - offerRank(b)) || (a.ukupno - b.ukupno);
 
   function computePlan() {
     const sel = selectedChains();
@@ -620,11 +640,11 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     const score = new Map();
     for (const r of perItem) {
       if (!r.best) continue;
-      for (const o of r.offers) if (o.ukupno === r.best.ukupno && !o.drugoPakiranje) score.set(o.lanac, (score.get(o.lanac) || 0) + 1);
+      for (const o of r.offers) if (o.ukupno === r.best.ukupno && !offerRank(o)) score.set(o.lanac, (score.get(o.lanac) || 0) + 1);
     }
     for (const r of perItem) {
       if (!r.best) continue;
-      const ties = r.offers.filter((o) => o.ukupno === r.best.ukupno && !!o.drugoPakiranje === !!r.best.drugoPakiranje);
+      const ties = r.offers.filter((o) => o.ukupno === r.best.ukupno && offerRank(o) === offerRank(r.best));
       r.best = ties.reduce((a, b) => ((score.get(b.lanac) || 0) > (score.get(a.lanac) || 0) ? b : a), ties[0]);
       r.offers = [r.best, ...r.offers.filter((o) => o !== r.best)];
     }
@@ -637,12 +657,12 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
       stops.get(r.best.lanac).push(r);
     }
     const single = sel.map((c) => {
-      let sum = 0, have = 0;
+      let sum = 0, have = 0, subs = 0;
       for (const r of perItem) {
         const o = r.offers.find((x) => x.lanac === c);
-        if (o) { sum += o.ukupno; have++; }
+        if (o) { sum += o.ukupno; have++; if (o.zamjena) subs++; }
       }
-      return { lanac: c, ukupno: sum, ima: have, nema: perItem.length - have };
+      return { lanac: c, ukupno: sum, ima: have, nema: perItem.length - have, zamjena: subs };
     }).sort((a, b) => (a.nema - b.nema) || (a.ukupno - b.ukupno));
     return { perItem, stops, total, missing, single, refs };
   }
@@ -902,7 +922,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   }
 
   // ---------- Prikaz ----------
-  try { if (localStorage.getItem("pk-debug")) window.__kosarica = { genericMatches, genericRef, allowedFilter, katalog: () => katalog, selectedChains, chainIndex }; } catch (e) {}
+  try { if (localStorage.getItem("pk-debug")) window.__kosarica = { genericMatches, genericRef, allowedFilter, offerAt, computePlan, katalog: () => katalog, state: () => state, selectedChains, chainIndex }; } catch (e) {}
   function render() {
     refreshPeople();
     document.querySelectorAll("nav.tabs button").forEach((b) => {
@@ -951,7 +971,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     if (o.kartica) b += `<span class="badge cardb">Uz ${esc(o.kartica)}</span>`;
     else if (o.redovna) b += `<span class="badge sale">Akcija</span>`;
     if (o.popust) b += `<span class="badge disc">−${o.popust.posto}% ${esc(o.popust.naziv)}</span>`;
-    if (o.drugoPakiranje) b += `<span class="badge example">Drugo pakiranje</span>`;
+    if (o.zamjena) b += `<span class="badge example">Zamjena</span>`;
+    else if (o.drugoPakiranje) b += `<span class="badge example">Drugo pakiranje</span>`;
     return b;
   }
   function unitNote(o) { return o && o.jedinicna ? `${eur(o.jedinicna)}/${o.jedinica}` : ""; }
@@ -1536,7 +1557,7 @@ ${list}
 
 Za svaku stavku napiši što kupac najvjerojatnije želi kupiti (najčešće svakodnevno značenje u Hrvatskoj) i kako se ta vrsta proizvoda zove u nazivima proizvoda u cjenicima hrvatskih trgovina (Konzum, Lidl, Kaufland, Spar, Plodine, Studenac, Eurospin).
 Značenje opiši samo onim što je kupac upisao: ne dodaj okus, punjenje, masnoću, veličinu ni način pakiranja koje nije naveo (za "7 days kroasan" je značenje "kroasan marke 7 Days", bilo kojeg okusa).
-Uobičajene riječi s popisa za kupnju: "ubrus", "ubrusi" i "ubrusi za ruke" su papirnati ručnici (kuhinjski papir u rolama), a ne vlažne maramice; "toaletni papir" je papir za WC; "posni sir" je biljni sir bez mlijeka; "salveta" je papirnati stolnjačić; "čajna" je čajna kobasica.
+Uobičajene riječi s popisa za kupnju: "ubrus", "ubrusi" i "ubrusi za ruke" su papirnati ručnici (kuhinjski papir u rolama), a ne vlažne maramice; "toaletni papir" je papir za WC; "posni sir" je svježi posni sir (kravlji svježi sir s malo masti, npr. "Dukat svježi posni sir"), a ne veganski sir; "čajna" je čajna kobasica; "zrnati sir" je svježi zrnati sir (cottage).
 Vrati SAMO JSON polje: [{"stavka": broj, "znacenje": "kratko, npr. papirnati kuhinjski ubrusi u rolama", "pojmovi": ["2 do 5 kratkih pojmova za pretraživanje naziva"]}]
 Pravila za pojmove:
 - Riječi kakve stoje u nazivima proizvoda, npr. za "ubrus": "papirnati ručnik", "kuhinjski papir", "kuhinjske role", "ubrus". Nazivi su često skraćeni ("pap. ručnici", "papir.ručnik"), pa pojam neka bude kratak.
@@ -1574,7 +1595,8 @@ Isključi: pribor i stvari koje samo spominju tu riječ (npr. "držač za ubrus"
 Nazivi u cjenicima su često skraćeni (npr. "Posl.za pse pedigr.tasty 140 g" je Pedigree Tasty poslastica za pse), pa ih čitaj prema smislu.
 Ako je kupac upisao točno određeni proizvod ili liniju (npr. "nivea length wonder regenerator"), prihvati samo taj proizvod u svim veličinama.
 Ako kupac nije upisao okus, punjenje, varijantu ili veličinu, prihvati sve okuse, punjenja, varijante i veličine (npr. za "7 days kroasan" sve 7 Days kroasane: kakao, vanilija, marelica, mini, family). Opis "kupac misli" samo pomaže razumjeti stavku; ne isključuj proizvod zbog pojedinosti koje kupac nije sam upisao. Ako je upisao općenitu vrstu (npr. "banane", "posni sir"), prihvati sve marke, okuse i veličine pakiranja te vrste, ali ne druge proizvode koji je samo spominju (npr. za "banane" svježe banane, a ne čokoladne banane, sok ili kašicu od banane).
-Vrati SAMO JSON polje: [{"stavka": broj, "proizvodi": [redni brojevi prihvaćenih proizvoda]}]
+Uz to navedi zamjene: proizvode iste vrste i namjene koje bi kupac uzeo kad trgovina nema traženo, npr. druga marka (za "eva tuna salata kus kus" druge tuna salate s kus kusom, za "libresse ulošci" drugi higijenski ulošci, za "7 days kroasan" drugi pakirani kroasani). Ne ponavljaj prihvaćene i ne predlaži drugu vrstu proizvoda (za kroasan ne keks, za uloške ne tampone). Ako je kupac upisao općenitu vrstu, zamjene ostavi prazne.
+Vrati SAMO JSON polje: [{"stavka": broj, "proizvodi": [redni brojevi prihvaćenih proizvoda], "zamjene": [redni brojevi zamjena]}]
 
 ${body}`, { signal: ctl.signal });
         for (const r of Array.isArray(b) ? b : []) {
@@ -1582,6 +1604,16 @@ ${body}`, { signal: ctl.signal });
           if (!pk) continue;
           const okNames = new Set((Array.isArray(r.proizvodi) ? r.proizvodi : []).map((j) => pk.names[Number(j) - 1]).filter(Boolean));
           pk.it.provjereno = todayIso();
+          pk.it.provjera = PROVJERA_V;
+          const subNames = new Set((Array.isArray(r.zamjene) ? r.zamjene : []).map((j) => pk.names[Number(j) - 1]).filter((nm) => nm && !okNames.has(nm)));
+          if (pk.it.rucno) {
+            // Ručni odabir ostaje; sve što provjera prihvati služi kao zamjena u trgovini koja odabrano nema.
+            const mine = new Set(pk.it.prihvaceni || []);
+            const subs = [...okNames, ...subNames].flatMap((nm) => pk.codesByName.get(nm)).filter((c) => !mine.has(c));
+            if (subs.length) pk.it.zamjene = subs; else delete pk.it.zamjene;
+            continue;
+          }
+          if (subNames.size) pk.it.zamjene = [...subNames].flatMap((nm) => pk.codesByName.get(nm)); else delete pk.it.zamjene;
           // Ništa prihvaćeno od pronađenih kandidata je gotovo uvijek pogrešno shvaćena stavka:
           // tada ostaje usporedba po riječima umjesto praznog popisa ("nema" u svim trgovinama).
           if (!okNames.size) { delete pk.it.prihvaceni; delete pk.it.odbijeni; continue; }
@@ -1589,7 +1621,7 @@ ${body}`, { signal: ctl.signal });
           pk.it.odbijeni = pk.names.filter((nm) => !okNames.has(nm)).flatMap((nm) => pk.codesByName.get(nm));
         }
       }
-      for (const pk of packs) if (!pk.names.length) pk.it.provjereno = todayIso();
+      for (const pk of packs) if (!pk.names.length) { pk.it.provjereno = todayIso(); pk.it.provjera = PROVJERA_V; }
       classifying = null;
       commit(items.length > 1 ? "Provjereno: za svaku stavku biraju se samo proizvodi koji odgovaraju." : "Provjereno.");
     } catch (e) {
@@ -1605,7 +1637,8 @@ ${body}`, { signal: ctl.signal });
       render();
     }
   }
-  function unchecked() { return state.stavke.filter((s) => s.upit && !s.provjereno); }
+  // Stavke koje treba (ponovno) provjeriti: nove i one provjerene starijom provjerom. Ručni odabir ostaje.
+  function unchecked() { return state.stavke.filter((s) => s.upit && (!s.provjereno || (s.provjera || 1) < PROVJERA_V)); }
 
   function addItem(code) {
     const row = byCode.get(code);
@@ -1797,7 +1830,10 @@ Ako na slikama nema kupona, vrati [].`;
         const it = picking && state.stavke.find((x) => x.id === picking.id);
         if (it) {
           const shown = pickerRows(it).map((r) => r[0]);
+          const before = [...(it.prihvaceni || []), ...(it.zamjene || [])];
           it.prihvaceni = shown.filter((c) => picking.sel.has(c));
+          const subs = [...new Set(before)].filter((c) => !picking.sel.has(c));
+          if (subs.length) it.zamjene = subs; else delete it.zamjene;
           it.odbijeni = shown.filter((c) => !picking.sel.has(c));
           it.iskljuceni = [];
           it.rucno = true;
@@ -1808,7 +1844,7 @@ Ako na slikama nema kupona, vrati [].`;
         break;
       }
       case "reclassify":
-        if (item) { for (const k of ["pojmovi", "prihvaceni", "odbijeni", "znacenje", "provjereno", "rucno"]) delete item[k]; classify([item]); }
+        if (item) { for (const k of ["pojmovi", "prihvaceni", "odbijeni", "zamjene", "znacenje", "provjereno", "provjera", "rucno"]) delete item[k]; classify([item]); }
         break;
       case "stop-classify": classifying?.ctl.abort(); break;
       case "accept": {
@@ -2002,7 +2038,7 @@ Ako na slikama nema kupona, vrati [].`;
       if (item && v) {
         if (item.upit) {
           item.upit = v; item.naziv = v[0].toUpperCase() + v.slice(1); item.iskljuceni = [];
-          for (const k of ["pojmovi", "prihvaceni", "odbijeni", "znacenje", "provjereno"]) delete item[k];
+          for (const k of ["pojmovi", "prihvaceni", "odbijeni", "zamjene", "znacenje", "provjereno", "provjera"]) delete item[k];
           setTimeout(() => classify([item]), 0);
         }
         else item.naziv = v;
