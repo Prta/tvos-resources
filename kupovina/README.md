@@ -24,10 +24,6 @@ objavljuju na svojim stranicama (robots.txt to dopušta):
 - **Konzum MultiPlusCard**: https://www.konzum.hr/web/posebne-ponude, jedna stranica u sekundi
 - **Kaufland Card XTRA**: JSON s tjednom ponudom na https://www.kaufland.hr/ponuda/pregled.html
 
-Eurospin dio tjednih akcija ne upisuje u službeni cjenik (npr. 9. 11. 2026. trajno mlijeko
-3,5% 1 l: cjenik 1,09 €, akcija 0,65 €). Te akcije skripta preuzima sa stranice
-https://www.eurospin.hr/akcija/ i povezuje s cjenikom po šifri iz naziva slike proizvoda.
-
 Skripta ih povezuje s cjenikom po šifri artikla trgovine i sprema s razdobljem
 važenja; isključuje se s `--bez-kartica`.
 
@@ -55,6 +51,12 @@ regije (obala ili kontinent), prema poštanskim brojevima iz poslovnica svih lan
 Ostale trgovine (stanje 9. 11. 2026.): Lidl Plus, Spar, Studenac (Moj Studenac) i dio
 Konzuma (MultiPlus BONUS, „Kupon po tvom” s povratom u BONUS eurima) imaju osobne kupone
 samo u aplikaciji; aplikacija ih čita sa snimki zaslona (i duge snimke, izrezane na dijelove).
+
+**Vrste proizvoda** (voće, povrće, meso, naresci, mliječni, ...) za biranje po vrsti određuje
+`vrste.py` po riječima u nazivu i zakonskoj kategoriji iz cjenika (cjenici imaju samo šest
+kategorija). Voće i povrće priznaje se samo kad je riječ na početku naziva, jer je drugdje obično
+okus ("žele kocke naranča"). Oko četvrtine proizvoda ostaje bez vrste; oni se i dalje nalaze
+pretraživanjem. Oznake "bez glutena", "bez laktoze", "bio" i "vegan" aplikacija traži u nazivu.
 
 ## Ručno pokretanje
 

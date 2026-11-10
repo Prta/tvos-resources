@@ -32,6 +32,9 @@ import zipfile
 from collections import Counter, defaultdict
 from datetime import date
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from vrste import VRSTE, categorize  # noqa: E402
+
 ARCHIVE_LIST = "https://api.cijene.dev/v0/list"
 KONZUM_OFFERS = "https://www.konzum.hr/web/posebne-ponude?page={page}&per_page=100"
 KAUFLAND_OFFERS = "https://www.kaufland.hr/ponuda/pregled.html"
@@ -560,6 +563,8 @@ def build(zip_path: str, archive_date: str, city: str | None, card_sources: dict
 
     rows = []
     brands, brand_index = [], {}
+    type_index = {label: n for n, label in enumerate(VRSTE)}
+    legal_order = ["konzum", "kaufland", "spar", "lidl", "eurospin", "studenac", "tommy"]
     junk_brands = {"", "#", "-", "no brand", "nobrand", "n/a", "ostalo", "razno", "vlastite potrebe"}
     for key, by_chain in merged.items():
         info_by_chain = infos[key]
@@ -574,14 +579,20 @@ def build(zip_path: str, archive_date: str, city: str | None, card_sources: dict
         prices = [by_chain.get(i) for i in range(len(CHAINS))]
         while prices and prices[-1] is None:
             prices.pop()
-        row = [key, name, prices]
-        # Marka (proizvođač) za grupiranje u aplikaciji: indeks u popisu "marke".
+        # Marka (proizvođač) za grupiranje i vrsta proizvoda (voće, meso, ...): indeksi u popisima
+        # "marke" i "vrste", -1 kad nisu poznati; -1 na kraju retka se izostavlja.
         nice = tidy_name(brand) if brand and fold(brand) not in junk_brands else ""
-        if nice:
-            if nice not in brand_index:
-                brand_index[nice] = len(brands)
-                brands.append(nice)
-            row.append(brand_index[nice])
+        if nice and nice not in brand_index:
+            brand_index[nice] = len(brands)
+            brands.append(nice)
+        legal = next((fold(info_by_chain[c].get("category") or "") for c in legal_order
+                      if c in info_by_chain and (info_by_chain[c].get("category") or "").strip()), "")
+        if legal and legal not in ("neprehrana",) and any(w in legal for w in ("hrana", "svjezi", "hladeno")):
+            legal = "hrana"
+        kind = categorize(fold(name), legal)
+        row = [key, name, prices, brand_index.get(nice, -1), type_index.get(kind, -1)]
+        while len(row) > 3 and row[-1] == -1:
+            row.pop()
         rows.append(row)
 
     # Proizvodi koje prodaje više lanaca prvi, jer se njih najviše isplati uspoređivati.
@@ -600,6 +611,7 @@ def build(zip_path: str, archive_date: str, city: str | None, card_sources: dict
         "kartice": cards,
         "plodineSlike": plodine_cache,  # već pročitane slike kupona, da se sutra ne čitaju opet
         "marke": brands,
+        "vrste": VRSTE,
         "proizvodi": rows,
     }
 

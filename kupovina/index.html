@@ -117,6 +117,15 @@ p { margin: 0; }
 .prow input { width: 20px; height: 20px; margin-top: 1px; accent-color: var(--save); }
 .prow .pmeta { grid-column: 2; font-size: var(--step--1); color: var(--muted); }
 .picker-actions { position: sticky; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); background: var(--bg); padding: 8px 0 2px; display: flex; gap: 8px; flex-wrap: wrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: var(--surface); font-weight: 600; font-size: var(--step--1); line-height: 1.3; }
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip.attr { border-style: dashed; }
+.chip.attr.on { background: var(--save); color: #fff; border-color: var(--save); border-style: solid; }
+.chip.done { opacity: 0.55; }
+.browse-panel { display: grid; gap: 10px; }
+.browse-tools { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.browse-tools input, .browse-tools select { border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; background: var(--surface); min-width: 0; }
 .onestore { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .badge.expired { background: transparent; color: var(--muted); border: 1px solid var(--line); text-decoration: line-through; }
 
@@ -1044,6 +1053,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
         <div><button class="btn primary" data-act="bulk-add">Dodaj na popis</button></div>
       </section>`;
     }
+    if (!target && katalog.vrste) h += browseHtml();
     h += `<section class="section" aria-label="Dodaj proizvod">
       <h2>${target ? `Dodaj zamjenu za: ${esc(target.naziv)}` : "Ili odaberi točno određeni proizvod"}</h2>
       ${target ? `<p class="small muted">Odaberi drugu marku ili pakiranje koje ti jednako odgovara. Aplikacija će u svakoj trgovini uzeti najjeftiniji od njih. <button class="linkbtn" data-act="cancel-alt">Odustani</button></p>` : `<p class="small muted">Upiši naziv, marku ili količinu, npr. „mlijeko 2,8 1 l”, „jaja”, „ariel color”.</p>`}
@@ -1159,7 +1169,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
   // Odabir proizvoda za opću stavku: sve što se nudi, po proizvođaču, s kvačicama.
   let picking = null;   // {id, sel: Set kodova}
   function brandOf(row) {
-    if (katalog.marke && row[3] != null && katalog.marke[row[3]]) return katalog.marke[row[3]];
+    if (katalog.marke && row[3] != null && row[3] >= 0 && katalog.marke[row[3]]) return katalog.marke[row[3]];
     const m = row[1].match(/\(([^()]+)\)\s*$/);
     return m ? m[1] : row[1].split(/\s+/)[0];
   }
@@ -1212,6 +1222,117 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; 
     // Početno označeno: ono što se sada uspoređuje.
     const sel = new Set(pickerRows(item).map((r) => r[0]).filter((c) => allowed(c, pos.get(c))));
     picking = { id: item.id, sel };
+  }
+
+  // ---------- Biraj po vrsti ----------
+  // Česte stavke po vrsti, za dodavanje jednim dodirom (kao "bilo koja marka").
+  const SUGGEST = {
+    "Voće": ["banane", "jabuke", "kruške", "naranče", "mandarine", "limun", "grožđe", "kivi", "jagode", "avokado"],
+    "Povrće": ["krumpir", "luk", "češnjak", "mrkva", "rajčica", "paprika", "krastavci", "zelena salata", "kupus", "tikvice", "gljive"],
+    "Meso": ["pileća prsa", "pileći bataci", "mljeveno meso", "svinjski vrat", "svinjski kare", "junetina", "puretina", "ćevapi"],
+    "Riba i plodovi mora": ["tuna u konzervi", "sardine", "oslić", "losos", "lignje", "riblji štapići"],
+    "Naresci i kobasice": ["šunka", "pureća prsa narezak", "pileća prsa narezak", "salama", "čajna kobasica", "hrenovke", "pršut", "slanina", "kulen"],
+    "Mliječni proizvodi i jaja": ["mlijeko", "jogurt", "svježi sir", "sir gauda", "kiselo vrhnje", "vrhnje za kuhanje", "maslac", "jaja", "mozzarella", "zrnati sir"],
+    "Kruh i peciva": ["kruh", "pecivo", "tost", "kifle", "tortilje", "dvopek"],
+    "Tjestenina, riža i brašno": ["tjestenina", "riža", "brašno", "šećer", "zobene pahuljice", "palenta", "griz"],
+    "Ulje, umaci i začini": ["ulje", "maslinovo ulje", "sol", "papar", "vegeta", "kečap", "majoneza", "senf", "ocat", "pasirana rajčica"],
+    "Konzerve i gotova jela": ["grah", "kukuruz šećerac", "grašak", "juha", "gotovo jelo"],
+    "Namazi i paštete": ["med", "džem", "nutella", "pašteta", "ajvar", "maslac od kikirikija"],
+    "Kava, čaj i kakao": ["mljevena kava", "kava u zrnu", "instant kava", "čaj", "kakao"],
+    "Slatkiši i grickalice": ["čokolada", "keksi", "čips", "napolitanke", "bomboni", "smoki", "kikiriki"],
+    "Smrznuto": ["sladoled", "smrznuto povrće", "pommes frites", "pizza", "smrznuti špinat"],
+    "Pića": ["voda", "mineralna voda", "sok", "coca cola", "pivo", "vino"],
+    "Za bebe": ["pelene", "vlažne maramice", "dječja kašica"],
+    "Kućni ljubimci": ["hrana za pse", "hrana za mačke", "poslastice za pse", "pijesak za mačke"],
+    "Higijena i kozmetika": ["šampon", "regenerator za kosu", "gel za tuširanje", "sapun", "pasta za zube", "četkica za zube", "dezodorans", "toaletni papir", "uložci"],
+    "Čišćenje": ["deterdžent za rublje", "omekšivač", "deterdžent za posuđe", "tablete za perilicu posuđa", "sredstvo za čišćenje", "spužve"],
+    "Kućanstvo": ["ubrusi", "vrećice za smeće", "aluminijska folija", "papir za pečenje", "salvete", "baterije"],
+  };
+  const ATTRS = [
+    { key: "gluten", label: "Bez glutena", suffix: "bez glutena", rx: /bez glu|bez gl\.|gluten.?free|gl\. ?fr\.|bezglutensk|senza glutine|free from|(^|[^a-z])b\.g\./ },
+    { key: "laktoza", label: "Bez laktoze", suffix: "bez laktoze", rx: /bez lak|lactose.?free|laktosefrei|senza lattosio|laktoza 0|(^|[^a-z])b\.lak|(^|[^a-z])k-?free/ },
+    { key: "bio", label: "Bio", suffix: "bio", rx: /(^|[^a-z])(bio|organic|eko)([^a-z]|$)/ },
+    { key: "vegan", label: "Vegan", suffix: "vegan", rx: /vegan/ },
+  ];
+  let browse = { vrsta: null, attrs: new Set(), filter: "", sort: "trgovine", limit: 40 };
+  let byType = null;   // vrsta -> indeksi proizvoda
+  function typeIndex() {
+    if (byType) return byType;
+    byType = new Map();
+    katalog.proizvodi.forEach((r, i) => {
+      const t = r[4] != null ? r[4] : -1;
+      if (t < 0) return;
+      if (!byType.has(t)) byType.set(t, []);
+      byType.get(t).push(i);
+    });
+    return byType;
+  }
+  function browseRows() {
+    ensureFolded();
+    const selIdx = selectedChains().map(chainIndex);
+    const base = browse.vrsta != null ? (typeIndex().get(browse.vrsta) || []) : folded.map((_, i) => i);
+    const attrs = ATTRS.filter((a) => browse.attrs.has(a.key));
+    const words = normText(browse.filter).split(/\s+/).filter(Boolean);
+    const out = [];
+    for (const i of base) {
+      const r = katalog.proizvodi[i];
+      if (!selIdx.some((ci) => r[2][ci] != null)) continue;
+      if (!attrs.every((a) => a.rx.test(folded[i]))) continue;
+      if (!words.every((w) => folded[i].includes(w))) continue;
+      out.push(r);
+    }
+    if (browse.sort === "cijena") {
+      out.sort((a, b) => ((cheapestSelected(a) || {}).cijena || 1e9) - ((cheapestSelected(b) || {}).cijena || 1e9));
+    } else {
+      const n = (r) => selIdx.filter((ci) => r[2][ci] != null).length;
+      out.sort((a, b) => n(b) - n(a) || a[1].localeCompare(b[1], "hr"));
+    }
+    return out;
+  }
+  function productRowHtml(r) {
+    const best = cheapestSelected(r);
+    const count = r[2].filter((x) => x != null).length;
+    return `<li class="result${best ? "" : " unavailable"}">
+      <div class="grow wraptext">${esc(r[1])}</div>
+      <button class="btn small primary" data-act="add" data-code="${esc(r[0])}" aria-label="Dodaj ${esc(r[1])}">Dodaj</button>
+      <div class="meta">
+        ${best ? `<span class="small">od <strong class="num">${esc(eur(best.cijena))}</strong> u trgovini ${esc(chainName(best.lanac))}</span>${best.kupon ? ` <span class="badge coupon">Kupon ${esc(couponLabel(best.kupon))}</span>` : best.kartica ? ` <span class="badge cardb">Uz ${esc(best.kartica)}</span>` : best.redovna ? ` <span class="badge sale">Akcija</span>` : ""}` : `<span class="small muted">Nema u tvojim trgovinama</span>`}
+        <span class="small muted">· ${count} ${plural(count, "lanac", "lanca", "lanaca")}</span>
+      </div>
+    </li>`;
+  }
+  function browseListHtml() {
+    const rows = browseRows();
+    if (!rows.length) return `<p class="small muted">Nema proizvoda koji odgovaraju.</p>`;
+    return `<p class="small muted">${rows.length.toLocaleString("hr-HR")} ${plural(rows.length, "proizvod", "proizvoda", "proizvoda")}</p>
+      <ul class="card results">${rows.slice(0, browse.limit).map(productRowHtml).join("")}</ul>
+      ${rows.length > browse.limit ? `<div><button class="btn small" data-act="browse-more">Prikaži još</button></div>` : ""}`;
+  }
+  function browseHtml() {
+    const vrste = katalog.vrste || [];
+    let h = `<section class="section" aria-label="Biraj po vrsti">
+      <h2>Biraj po vrsti</h2>
+      <div class="chips">${vrste.map((v, i) => `<button class="chip${browse.vrsta === i ? " on" : ""}" data-act="browse" data-vrsta="${i}" aria-pressed="${browse.vrsta === i}">${esc(v)}</button>`).join("")}</div>
+      <div class="chips">${ATTRS.map((a) => `<button class="chip attr${browse.attrs.has(a.key) ? " on" : ""}" data-act="browse-attr" data-attr="${a.key}" aria-pressed="${browse.attrs.has(a.key)}">${esc(a.label)}</button>`).join("")}</div>`;
+    if (browse.vrsta != null || browse.attrs.size) {
+      const label = browse.vrsta != null ? vrste[browse.vrsta] : "";
+      const suffix = ATTRS.filter((a) => browse.attrs.has(a.key)).map((a) => a.suffix).join(" ");
+      const ideas = (SUGGEST[label] || []).map((x) => (suffix ? `${x} ${suffix}` : x));
+      const onList = new Set(state.stavke.filter((x) => x.upit).map((x) => fold(x.upit)));
+      h += `<div class="card browse-panel" style="padding:12px">
+        ${ideas.length ? `<div class="small" style="font-weight:600">Dodaj jednim dodirom, aplikacija bira najjeftiniju marku:</div>
+        <div class="chips">${ideas.map((x) => onList.has(fold(x))
+          ? `<span class="chip done">✓ ${esc(x)}</span>`
+          : `<button class="chip" data-act="add-idea" data-text="${esc(x)}">+ ${esc(x)}</button>`).join("")}</div>` : ""}
+        <div class="small" style="font-weight:600">${label ? `Svi proizvodi: ${esc(label.toLowerCase())}` : "Svi proizvodi"}${suffix ? ` (${esc(suffix)})` : ""}</div>
+        <div class="browse-tools">
+          <input id="browse-filter" type="search" autocomplete="off" placeholder="Suzi, npr. marka ili okus" aria-label="Suzi popis" value="${esc(browse.filter)}">
+          <select id="browse-sort" aria-label="Poredaj"><option value="trgovine"${browse.sort === "trgovine" ? " selected" : ""}>U najviše trgovina</option><option value="cijena"${browse.sort === "cijena" ? " selected" : ""}>Najjeftinije</option></select>
+        </div>
+        <div id="browse-list">${browseListHtml()}</div>
+      </div>`;
+    }
+    return h + `</section>`;
   }
 
   let renaming = null;
@@ -1614,6 +1735,28 @@ Ako na slikama nema kupona, vrati [].`;
         break;
       }
       case "classify-all": classify(unchecked()); break;
+      case "browse": {
+        const v = Number(el.dataset.vrsta);
+        browse = { ...browse, vrsta: browse.vrsta === v ? null : v, filter: "", limit: 40 };
+        render();
+        break;
+      }
+      case "browse-attr":
+        browse.attrs.has(el.dataset.attr) ? browse.attrs.delete(el.dataset.attr) : browse.attrs.add(el.dataset.attr);
+        browse.limit = 40;
+        render();
+        break;
+      case "browse-more": {
+        browse.limit += 40;
+        const box = $("#browse-list");
+        if (box) box.innerHTML = browseListHtml();
+        break;
+      }
+      case "add-idea": {
+        const it = addGeneric(el.dataset.text);
+        if (it) { commit(`Dodano: ${it.naziv}`); classify([it]); }
+        break;
+      }
       case "pick":
         if (picking && picking.id === id) picking = null;
         else if (item) { openPicker(item); openItem = null; }
@@ -1747,6 +1890,13 @@ Ako na slikama nema kupona, vrati [].`;
   document.addEventListener("input", (ev) => {
     const t = ev.target;
     if (t.id === "bulk") { bulkText = t.value; return; }
+    if (t.id === "browse-filter") {
+      browse.filter = t.value;
+      browse.limit = 40;
+      clearTimeout(browseTimer);
+      browseTimer = setTimeout(() => { const box = $("#browse-list"); if (box) box.innerHTML = browseListHtml(); }, 150);
+      return;
+    }
     if (t.id === "pick-filter") {
       const q = normText(t.value).split(/\s+/).filter(Boolean);
       document.querySelectorAll("[data-picker] .prow").forEach((row) => { row.hidden = !q.every((w) => row.dataset.name.includes(w)); });
@@ -1763,10 +1913,16 @@ Ako na slikama nema kupona, vrati [].`;
       }, 150);
     }
   });
-  let searchTimer = null;
+  let searchTimer = null, browseTimer = null;
 
   document.addEventListener("change", (ev) => {
     const t = ev.target;
+    if (t.id === "browse-sort") {
+      browse.sort = t.value;
+      const box = $("#browse-list");
+      if (box) box.innerHTML = browseListHtml();
+      return;
+    }
     if (t.dataset.pick != null && picking) {
       t.checked ? picking.sel.add(t.dataset.pick) : picking.sel.delete(t.dataset.pick);
       return;
